@@ -81,6 +81,38 @@ action of the test.
 cancelled by `$ONGSAVE` (it moved to another location) is recorded as the
 event `save_cancelled`.
 
+### Host functions
+
+The functions, statements and profiles of the host are registered right
+after `QSPInit`, so these commands go before the first action of the test
+(a registration after it checks that the engine refuses it).
+
+| Command | Meaning |
+|---|---|
+| `@host-func [!] NAME MIN MAX [TYPE]` | `QSPRegisterFunction`; `TYPE` is the result type: `?` (default, the result as it is), `#`, `$`, `%` (tuple) or a `QSP_TYPE_*` number; `!` expects a refusal |
+| `@host-stat [!] NAME MIN MAX` | `QSPRegisterStatement` |
+| `@host-profile [!] NAME VERSION` | `QSPRegisterProfile` |
+| `@host-db` | registers the standard `qsp.db.get`, `qsp.db.set`, `qsp.db.del` with profile `qsp.db 1.0.0`, backed by an in-memory store of the runner (the store survives `@reinit` within the test) |
+| `@host-reply NAME REPLY` | queues the reply to the next call of `NAME` (by the registered spelling) |
+| `@reinit` | `QSPTerminate` + `QSPInit`: the registry is empty again, the game is loaded again by the next action |
+
+Every call is recorded as the event `host NAME ARGS` (the arguments as QSP
+literals separated with `, `). A call without a queued reply succeeds with
+the undefined result. The replies:
+
+| Reply | Meaning |
+|---|---|
+| `=> VALUE` | the result, a QSP literal (ignored for statements) |
+| `fail` | the call fails (`HOSTFUNCFAILED`) |
+| `ok` | the call succeeds with the undefined result |
+| `exec CODE` | tries `QSPExecString` from inside the call, records `host-exec 0/1` (the engine refuses it) |
+| `read VAR` | reads a variable from inside the call, records `read VAR => VALUE` |
+
+`@expect error-desc TEXT` checks the description of the last error
+(`QSPGetLastErrorData`), e.g. `External function not found! (T.F)`.
+`@expect same-saves A B` checks that two in-memory saves are equal byte by
+byte.
+
 An error of the engine is recorded as the event `error NAME` and must be
 consumed with `@expect error`; an unconsumed error fails the test at the
 next action or at the end of the test. `NAME` is the `QSP_ERR_*` name

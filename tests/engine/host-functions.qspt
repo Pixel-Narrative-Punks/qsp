@@ -1,0 +1,907 @@
+// Functions, statements & profiles of the host (stage 1 of the host functions)
+// The registration commands run right away, before the game gets loaded; "!" expects a refusal.
+// Every call of a host function records the event "host NAME [ARGS]".
+
+// ------------------------------------------------------------
+// Calls & arguments
+
+@test function with a fixed number of arguments
+@host-func t.add 2 2
+@host-reply t.add => 5
+@src
+x = t.add(2, 3)
+@run
+@expect event host t.add [2, 3]
+@expect x => 5
+
+@test function with optional arguments
+@host-func t.f 0 3
+@src
+t.f() & t.f(1) & t.f(1, 'a', [2])
+@run
+@expect events
+host t.f []
+host t.f [1]
+host t.f [1, 'a', [2]]
+
+@test too few arguments
+@host-func t.f 2 3
+@src
+x = t.f(1)
+@run
+@expect error ARGSCOUNT
+@expect no-event host
+
+@test too many arguments
+@host-func t.f 0 1
+@src
+x = t.f(1, 2)
+@run
+@expect error ARGSCOUNT
+@expect no-event host
+
+@test up to 20 arguments
+@host-func t.f 0 20
+@src
+t.f(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+@run
+@expect event host t.f [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+@test arguments are evaluated before the call
+@host-func t.f 1 1
+@src
+a = 2 & t.f(a * 3 & '')
+@run
+@expect event host t.f ['6']
+
+@test logical values & code come as numbers & strings, also inside tuples
+@host-func t.f 0 3
+@src
+t.f(1 = 1, {p 1}, [2 > 3, {x}])
+@run
+@expect event host t.f [1, 'p 1', [0, 'x']]
+
+@test undefined arguments
+@host-func t.f 1 2
+@src
+t.f(?, no_such_var)
+@run
+@expect event host t.f [?, ?]
+
+@test function without arguments can be called without brackets
+@host-func t.zero 0 0
+@host-reply t.zero => 7
+@src
+x = t.zero + 1
+@run
+@expect x => 8
+
+@test function with a single argument can be called without brackets
+@host-func t.one 1 1
+@host-reply t.one => 'r'
+@src
+$x = t.one 'a' + '!'
+@run
+@expect event host t.one ['a']
+@expect $x => 'r!'
+
+@test function with two arguments requires brackets
+@host-func t.two 2 2
+@src
+x = t.two 1, 2
+@run
+@expect error BRACKETNOTFOUND
+
+@test function names are case insensitive
+@host-func Test.Func 0 0
+@host-reply Test.Func => 1
+@src
+x = TEST.func()
+@run
+@expect event host Test.Func []
+@expect x => 1
+
+@test cyrillic names
+@host-func плеер.функция 0 0
+@host-reply плеер.функция => 'ок'
+@src
+$x = ПЛЕЕР.Функция()
+@run
+@expect $x => 'ок'
+
+@test nested calls
+@host-func t.f 1 1
+@host-reply t.f => 2
+@host-reply t.f => 3
+@src
+x = t.f(t.f(1))
+@run
+@expect events
+host t.f [1]
+host t.f [2]
+@expect x => 3
+
+@test calls in subexpressions of strings
+@host-func t.f 0 0
+@host-reply t.f => 'x'
+@src
+$s = 'a<<t.f()>>b'
+@run
+@expect $s => 'axb'
+
+// ------------------------------------------------------------
+// Results
+
+@test result is copied
+@host-func t.f 0 0
+@host-reply t.f => 'text'
+@src
+$x = t.f()
+@run
+@expect $x => 'text'
+
+@test result not set is undefined
+@host-func t.f 0 0
+@src
+x = t.f()
+@run
+@expect x => ?
+
+@test tuple result
+@host-func t.f 0 0
+@host-reply t.f => [1, 'a', [2, ?]]
+@src
+%x = t.f()
+@run
+@expect %x => [1, 'a', [2, ?]]
+
+@test implicit statement prints the result
+@host-func t.f 0 0
+@host-reply t.f => 'shown'
+@src
+t.f()
+@run
+@expect main shown\r\n
+
+@test implicit statement doesn't print an undefined result
+@host-func t.f 0 0
+@src
+'a'
+t.f()
+'b'
+@run
+@expect main a\r\nb\r\n
+
+@test failure of the host
+@host-func t.f 0 0
+@host-reply t.f fail
+@src
+x = 1 & x = t.f() & x = 2
+@run
+@expect error HOSTFUNCFAILED (location 'test', line 1, local 1, action -1) X = 1 & X = T.F() & X = 2
+@expect error-desc External function error! (t.f)
+@expect x => 1
+
+@test failure of a statement of the host
+@host-stat t.s 0 0
+@host-reply t.s fail
+@src
+t.s
+@run
+@expect error HOSTFUNCFAILED
+@expect error-desc External function error! (t.s)
+
+// ------------------------------------------------------------
+// Type prefixes work like for the built-in functions: they don't convert
+
+@test function without a fixed type accepts any prefix and keeps the value
+@host-func t.f 0 0
+@host-reply t.f => 5
+@host-reply t.f => 5
+@host-reply t.f => 5
+@src
+a = $t.f() & b = #t.f() & c = %t.f()
+@run
+@expect a => 5
+@expect b => 5
+@expect c => 5
+
+@test function of a string type accepts the string prefix
+@host-func t.s 0 0 $
+@host-reply t.s => 'a'
+@src
+x = $t.s()
+@run
+@expect x => 'a'
+
+@test function of a string type converts the result
+@host-func t.s 0 0 $
+@host-reply t.s => 12
+@src
+x = t.s()
+@run
+@expect x => '12'
+
+@test function of a numeric type converts the result
+@host-func t.n 0 0 #
+@host-reply t.n => '12'
+@src
+x = t.n()
+@run
+@expect x => 12
+
+@test function of a numeric type fails on a non-numeric result
+@host-func t.n 0 0 #
+@host-reply t.n => '12a'
+@src
+x = t.n()
+@run
+@expect error TYPEMISMATCH
+
+@test function of a numeric type turns an undefined result into 0
+@host-func t.n 0 0 #
+@src
+x = t.n()
+@run
+@expect x => 0
+
+@test function of a tuple type
+@host-func t.t 0 0 %
+@host-reply t.t => 3
+@src
+x = %t.t()
+@run
+@expect x => [3]
+
+@test a prefix of another type is not the name of the function
+@host-func t.s 0 0 $
+@src
+x = #t.s()
+@run
+@expect error HOSTFUNCNOTFOUND
+@expect error-desc External function not found! (#T.S)
+@expect no-event host
+
+// ------------------------------------------------------------
+// Statements
+
+@test statement with arguments
+@host-stat t.s 1 3
+@src
+t.s 1, 'a'
+@run
+@expect event host t.s [1, 'a']
+
+@test statement with arguments in brackets
+@host-stat t.s 1 3
+@src
+t.s(1, 'a')
+@run
+@expect event host t.s [1, 'a']
+
+@test statement without arguments
+@host-stat t.s 0 0
+@src
+t.s & t.s()
+@run
+@expect count 2 host t.s []
+
+@test statement with a wrong number of arguments
+@host-stat t.s 1 1
+@src
+t.s 1, 2
+@run
+@expect error ARGSCOUNT
+@expect no-event host
+
+@test statement inside single-line IF, ACT and with ELSE
+@host-stat t.s 1 1
+@src
+if 1: t.s 'then' else t.s 'else'
+if 0: t.s 'no' else t.s 'yes'
+act 'a': t.s 'act'
+@run
+@select-act 0
+@exec-act
+@expect events
+host t.s ['then']
+host t.s ['yes']
+actions_changed [a]
+host t.s ['act']
+
+@test equal sign in the arguments of a registered statement is a comparison
+@host-stat t.notify 2 3
+@src
+a = 1 & b = 1 & t.notify 'id', 'on_x', a = b
+@run
+@expect event host t.notify ['id', 'on_x', 1]
+
+@test comparison in brackets
+@host-stat t.notify 2 3
+@src
+a = 1 & b = 2 & t.notify 'id', 'on_x', (a = b)
+@run
+@expect event host t.notify ['id', 'on_x', 0]
+
+@test statement name in an expression is not a function
+@host-stat t.s 0 1
+@src
+x = t.s(1)
+@run
+@expect error HOSTFUNCNOTFOUND
+@expect no-event host
+
+@test HOSTFUNC sees statements too
+@host-stat t.s 0 0
+@src
+x = HOSTFUNC('t.s')
+@run
+@expect x => 1
+
+// ------------------------------------------------------------
+// Assignments & variables with dots
+
+@test assignment to a registered function is an error
+@host-func t.f 0 0
+@src
+t.f = 1
+@run
+@expect error INCORRECTNAME
+
+@test assignment to a registered function with a prefix is an error
+@host-func t.f 0 0
+@src
+$t.f = 'a'
+@run
+@expect error INCORRECTNAME
+
+@test assignment to an item of a registered function is an error
+@host-func t.f 0 0
+@src
+t.f[1] = 1
+@run
+@expect error INCORRECTNAME
+
+@test local variable named like a registered function is an error
+@host-func t.f 0 0
+@src
+local t.f = 1
+@run
+@expect error INCORRECTNAME
+
+@test assignment to a registered statement is an error
+@host-stat t.s 0 1
+@src
+t.s = 1
+@run
+@expect error INCORRECTNAME
+@expect no-event host
+
+@test variables with dots keep working without host functions
+@src
+db.count = 1
+db.count += 1
+db.arr[1] = 'x'
+db.count
+db.count + 1
+db.count, 3
+$db.arr[1]
+db.count and 1
+@run
+@expect db.count => 2
+@expect main 2\r\n3\r\n[2,3]\r\nx\r\n1\r\n
+
+@test variable with a dot without brackets is a variable even if it looks like a call
+@src
+qsp.db.get = 5
+x = qsp.db.get + 1
+@run
+@expect x => 6
+
+@test unregistered name with a dot and an equal sign is an assignment
+@src
+qsp.mud.notify id, 'on_x', a = b
+@run
+@expect error INCORRECTNAME
+
+// ------------------------------------------------------------
+// Missing functions: the call compiles and fails only when executed
+
+@test missing function fails when it's called
+@src
+x = qsp.db.get('x')
+@run
+@expect error HOSTFUNCNOTFOUND (location 'test', line 1, local 1, action -1) X = QSP.DB.GET('x')
+@expect error-desc External function not found! (QSP.DB.GET)
+
+@test missing function in a branch that doesn't run
+@src
+if 0: x = qsp.db.get('x')
+x = iif(0, qsp.db.get('x'), 3)
+@run
+@expect x => 3
+
+@test missing function doesn't evaluate its arguments
+@src
+x = qsp.db.get(func('side'))
+---
+# side
+side = 1
+@run
+@expect error HOSTFUNCNOTFOUND
+@expect side => ?
+
+@test missing statement fails when it's executed
+@src
+x = 1
+qsp.mud.msgto 'id', 'text'
+x = 2
+@run
+@expect error HOSTFUNCNOTFOUND (location 'test', line 2, local 2, action -1) QSP.MUD.MSGTO 'id', 'text'
+@expect error-desc External function not found! (QSP.MUD.MSGTO)
+@expect x => 1
+
+@test missing statement in a branch that doesn't run
+@src
+if 0: qsp.mud.msgto 'id', 'text'
+if 0:
+  qsp.mud.msgto 'id', 'text'
+end
+x = 1
+@run
+@expect x => 1
+
+@test missing statement with brackets
+@src
+qsp.mud.ping(1)
+@run
+@expect error HOSTFUNCNOTFOUND
+
+@test HOSTFUNC with and without the function
+@host-func t.f 0 0
+@host-reply t.f => 'here'
+@src
+if HOSTFUNC('t.f'):
+  $a = t.f()
+else
+  $a = 'fallback'
+end
+if HOSTFUNC('qsp.db.get'):
+  $b = qsp.db.get('x')
+else
+  $b = 'fallback'
+end
+c = HOSTFUNC('T.F') & d = HOSTFUNC('$t.f') & e = HOSTFUNC 'bad name'
+@run
+@expect $a => 'here'
+@expect $b => 'fallback'
+@expect c => 1
+@expect d => 0
+@expect e => 0
+
+@test wrapper location from the spec
+@host-db
+@src
+qsp.db.set 'score', 7
+score = @db_get('score')
+none = @db_get('none')
+---
+# db_get
+if HOSTFUNC('qsp.db.get'):
+  result = qsp.db.get($ARGS[0])
+else
+  result = 0
+end
+@run
+@expect score => 7
+@expect none => ?
+
+@test wrapper location without the function
+@src
+score = @db_get('score')
+---
+# db_get
+if HOSTFUNC('qsp.db.get'):
+  result = qsp.db.get($ARGS[0])
+else
+  result = 0
+end
+@run
+@expect score => 0
+
+// ------------------------------------------------------------
+// DYNAMIC & DYNEVAL
+
+@test calls inside DYNAMIC
+@host-func t.f 1 1
+@host-reply t.f => 4
+@host-stat t.s 1 1
+@src
+dynamic 'x = t.f(<<1+1>>) & t.s $args[0]', 'arg'
+@run
+@expect events
+host t.f [2]
+host t.s ['arg']
+@expect x => 4
+
+@test calls inside DYNEVAL
+@host-func t.f 1 1
+@host-reply t.f => 'r'
+@src
+$x = dyneval('result = t.f($args[0])', 'a')
+@run
+@expect event host t.f ['a']
+@expect $x => 'r'
+
+@test missing function inside DYNAMIC
+@src
+dynamic {qsp.mud.ping 1}
+@run
+@expect error HOSTFUNCNOTFOUND
+
+// ------------------------------------------------------------
+// Profiles
+
+@test HOSTPROF returns the version of a profile
+@host-profile classic 1.2.3
+@src
+$a = $HOSTPROF('classic') & $b = $HOSTPROF('CLASSIC') & $c = $HOSTPROF('unknown')
+@run
+@expect $a => '1.2.3'
+@expect $b => '1.2.3'
+@expect $c => ''
+
+@test HOSTPROFMIN compares versions
+@host-profile my.player 1.4.2
+@src
+a = HOSTPROFMIN('my.player', '1.0.0')
+b = HOSTPROFMIN('my.player', '1.4.2')
+c = HOSTPROFMIN('my.player', '1.4.3')
+d = HOSTPROFMIN('my.player', '1.5.0')
+e = HOSTPROFMIN('my.player', '2.0.0')
+f = HOSTPROFMIN('my.player', '0.9.0')
+g = HOSTPROFMIN('unknown', '1.0.0')
+h = HOSTPROFMIN('my.player', '1.3.99')
+@run
+@expect a => 1
+@expect b => 1
+@expect c => 0
+@expect d => 0
+@expect e => 0
+@expect f => 0
+@expect g => 0
+@expect h => 1
+
+@test HOSTPROFMIN fails on an incorrect version
+@host-profile classic 1.0.0
+@src
+x = 1 & x = HOSTPROFMIN('classic', '1.0') & x = 2
+@run
+@expect error INCORRECTVERSION
+@expect error-desc Incorrect version! (1.0)
+@expect x => 1
+
+@test HOSTPROFMIN fails on an incorrect version even without the profile
+@src
+x = HOSTPROFMIN('unknown', 'v1')
+@run
+@expect error INCORRECTVERSION
+
+@test incorrect versions of HOSTPROFMIN
+@src
+a = HOSTPROFMIN('p', '')
+@run
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', '1.0.0.0')
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', '01.0.0')
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', '1.0.-1')
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', ' 1.0.0')
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', '1.0.0-beta')
+@expect error INCORRECTVERSION
+@exec a = HOSTPROFMIN('p', '0.0.0') & b = HOSTPROFMIN('p', '10.20.30')
+@expect a => 0
+@expect b => 0
+
+@test the example from the spec
+@src
+if HOSTPROFMIN('qsp.db', '1.0.0') = 0:
+  'qsp.db 1.0.0 is required'
+  exit
+end
+'qsp.db <<$HOSTPROF(''qsp.db'')>>'
+@run
+@expect main qsp.db 1.0.0 is required\r\n
+
+@test standard profile qsp.db
+@host-db
+@src
+'qsp.db <<$HOSTPROF(''qsp.db'')>>'
+x = HOSTPROFMIN('qsp.db', '1.0.0')
+@run
+@expect main qsp.db 1.0.0\r\n
+@expect x => 1
+
+// ------------------------------------------------------------
+// Registration rules
+
+@test names of the functions
+@host-func ! nodot 0 0
+@host-func ! .lead 0 0
+@host-func ! trail. 0 0
+@host-func ! a..b 0 0
+@host-func ! 1a.b 0 0
+@host-func ! $a.b 0 0
+@host-func ! #a.b 0 0
+@host-func ! %a.b 0 0
+@host-func ! a.b+c 0 0
+@host-func ! a.b(c 0 0
+@host-func ! a.b'c 0 0
+@host-func ! . 0 0
+@host-func a.1b 0 0
+@host-func a.b.c.d 0 0
+@host-func a_b.c$d 0 0
+@src
+x = HOSTFUNC('a.1b') + HOSTFUNC('a.b.c.d') + HOSTFUNC('a_b.c$d')
+@run
+@expect x => 3
+
+@test arguments & types of the functions
+@host-func ! t.a -1 1
+@host-func ! t.b 2 1
+@host-func ! t.c 0 21
+@host-func ! t.d 0 0 3
+@host-func ! t.e 0 0 5
+@host-func ! t.f 0 0 6
+@host-func ! t.g 0 0 7
+@host-stat ! t.h 0 21
+@host-func t.i 0 20 %
+
+@test the same name is refused
+@host-func t.f 0 0
+@host-func ! t.f 0 1
+@host-func ! T.F 0 0
+@host-stat ! t.f 0 0
+@host-stat t.s 0 0
+@host-func ! t.s 0 0
+@host-stat ! T.S 1 1
+
+@test namespace qsp is reserved for the standard functions
+@host-func ! qsp.f 0 0
+@host-func ! qsp.db.other 0 0
+@host-stat ! qsp.mud.msgto 2 2
+@host-func ! qsp.db.get 0 1
+@host-func ! qsp.db.get 1 1 $
+@host-stat ! qsp.db.get 1 1
+@host-func ! qsp.db.set 2 2
+@host-stat ! qsp.db.set 1 2
+@host-func ! QSP.DB.DEL 1 1
+@host-func qsp.db.get 1 1
+@host-stat qsp.db.set 2 2
+@host-stat QSP.DB.DEL 1 1
+@host-func qspx.f 0 0
+@host-func qsp_x.f 0 0
+
+@test names of the profiles
+@host-profile classic 1.0.0
+@host-profile my.player 1.0.0
+@host-profile ! .classic 1.0.0
+@host-profile ! classic. 1.0.0
+@host-profile ! a..b 1.0.0
+@host-profile ! 1classic 1.0.0
+@host-profile ! $classic 1.0.0
+@host-profile ! cl+assic 1.0.0
+@host-profile ! CLASSIC 1.0.0
+@host-profile qspx 1.0.0
+
+@test versions of the profiles
+@host-profile a.p 0.0.0
+@host-profile b.p 10.200.3000
+@host-profile ! c.p 1.0
+@host-profile ! d.p 1.0.0.0
+@host-profile ! e.p 01.0.0
+@host-profile ! f.p 1.0.0-rc.1
+@host-profile ! g.p v1.0.0
+@host-profile ! h.p 1..0
+@host-profile ! i.p 99999999999.0.0
+@host-profile ! j.p
+
+@test namespace qsp is reserved for the standard profiles
+@host-profile ! qsp 1.0.0
+@host-profile ! QSP 1.0.0
+@host-profile ! qsp.host 1.0.0
+@host-profile ! qsp.mud 1.0.0
+@host-func qsp.db.get 1 1
+@host-stat qsp.db.set 2 2
+@host-profile ! qsp.db 1.0.0
+@host-stat qsp.db.del 1 1
+@host-profile ! qsp.db 1.1.0
+@host-profile ! qsp.db 2.0.0
+@host-profile ! qsp.db 1.0
+@host-profile qsp.db 1.0.0
+@host-profile ! qsp.db 1.0.0
+
+@test registration after the game is loaded is refused
+@src
+x = 1
+@run
+@host-func ! t.f 0 0
+@host-stat ! t.s 0 0
+@host-profile ! a.p 1.0.0
+@exec x = HOSTFUNC('t.f')
+@expect x => 0
+
+@test registration after code is executed is refused
+@exec x = 1
+@host-func ! t.f 0 0
+
+// ------------------------------------------------------------
+// The registry lives till QSPTerminate
+
+@test registry stays after OPENQST
+@host-func t.f 0 0
+@host-profile p.q 1.0.0
+@module 2.qsp
+# first
+a = HOSTFUNC('t.f') & $v = $HOSTPROF('p.q')
+---
+@src
+OPENQST '2.qsp'
+@run
+@expect a => 1
+@expect $v => '1.0.0'
+
+@test registry stays after INCLIB
+@host-func t.f 0 0
+@host-reply t.f => 3
+@module lib.qsp
+# lib
+x = t.f()
+---
+@src
+INCLIB 'lib.qsp' & gs 'lib'
+@run
+@expect x => 3
+
+@test registry stays after a restart and a loaded save
+@host-func t.f 0 0
+@host-reply t.f => 1
+@host-reply t.f => 2
+@host-reply t.f => 3
+@src
+x = t.f()
+@run
+@expect x => 1
+@save s
+@restart
+@exec y = t.f()
+@expect y => 2
+@load-save s
+@exec z = t.f()
+@expect z => 3
+
+@test registry is cleared by QSPTerminate
+@host-func t.f 0 0
+@host-profile p.q 1.0.0
+@src
+x = HOSTFUNC('t.f')
+@run
+@expect x => 1
+@reinit
+@exec x = HOSTFUNC('t.f') & $v = $HOSTPROF('p.q')
+@expect x => 0
+@expect $v => ''
+
+@test registration works again after QSPTerminate
+@host-func t.f 0 0
+@exec x = 1
+@reinit
+@host-func t.f 0 0
+@host-reply t.f => 9
+@exec x = t.f()
+@expect x => 9
+
+@test save format doesn't change with host functions
+@src
+x = 1 & qsp.db.set 'k', 1
+@run
+@expect error HOSTFUNCNOTFOUND
+@save without
+@reinit
+@host-db
+@host-func t.f 0 0
+@run
+@save with
+@expect same-saves without with
+@load-save without
+@expect x => 1
+
+// ------------------------------------------------------------
+// Reentrancy: the host functions can only read the state
+
+@test host function can't execute code
+@host-func t.f 0 0
+@host-reply t.f exec y = 5
+@src
+x = t.f() & z = 1
+@run
+@expect event host-exec 0
+@expect y => ?
+@expect z => 1
+
+@test host statement can't execute code
+@host-stat t.s 0 0
+@host-reply t.s exec gt 'other'
+@src
+t.s & z = 1
+---
+# other
+o = 1
+@run
+@expect event host-exec 0
+@expect o => ?
+@expect z => 1
+
+@test host function can read variables
+@host-func t.f 0 0
+@host-reply t.f read $name
+@src
+$name = 'Bob' & t.f()
+@run
+@expect event read $name => 'Bob'
+
+@test host function sees the local variables of the caller
+@host-func t.f 0 0
+@host-reply t.f read v
+@src
+gs 'sub'
+---
+# sub
+local v = 7
+t.f()
+@run
+@expect event read v => 7
+
+// ------------------------------------------------------------
+// qsp.db: data outside of the saves (the store of the runner survives @reinit)
+
+@test qsp.db keeps values of any type
+@host-db
+@src
+qsp.db.set 'n', 1
+qsp.db.set 's', 'text'
+qsp.db.set 't', [1, 'a']
+qsp.db.set ['k', 1], 'tuple key'
+n = qsp.db.get('n') & $s = qsp.db.get('s') & %t = qsp.db.get('t') & $k = qsp.db.get(['k', 1])
+qsp.db.del 'n'
+n2 = qsp.db.get('n')
+@run
+@expect n => 1
+@expect $s => 'text'
+@expect %t => [1, 'a']
+@expect $k => 'tuple key'
+@expect n2 => ?
+
+@test qsp.db is not restored by a save
+@host-db
+@src
+qsp.db.set 'achievement', 1
+@run
+@save s
+@exec qsp.db.set 'achievement', 2
+@load-save s
+@exec a = qsp.db.get('achievement')
+@expect a => 2
+
+@test qsp.db survives a new session
+@host-db
+@src
+qsp.db.set 'best', 100
+@run
+@reinit
+@host-db
+@exec best = qsp.db.get('best')
+@expect best => 100

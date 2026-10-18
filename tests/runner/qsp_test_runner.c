@@ -415,6 +415,15 @@ typedef struct
     int Size;
 } SaveSlot;
 
+typedef struct
+{
+    char *Name;
+    int IsStatement;
+    int IsDb; /* one of the functions of qsp.db */
+    char **Replies; /* actions of the next calls */
+    int RepliesCount;
+} HostFunc;
+
 static struct
 {
     const char *FileName;
@@ -434,6 +443,7 @@ static struct
     int EventsCount;
 
     char *PendingError; /* error that hasn't been checked by the test yet */
+    char *LastErrorDesc; /* description of the last error */
 
     char **InputReplies;
     int InputRepliesCount;
@@ -446,6 +456,12 @@ static struct
     int MsCount;
     char **MsgWatches; /* variables read while the MSG callback runs */
     int MsgWatchesCount;
+
+    HostFunc *HostFuncs; /* functions & statements registered by the test */
+    int HostFuncsCount;
+    char **DbKeys; /* the store of qsp.db: formatted keys & values, it survives @reinit */
+    char **DbValues;
+    int DbCount;
 
     SaveSlot *Saves;
     int SavesCount;
@@ -913,10 +929,11 @@ static const char *errorName(int num)
         "CANTLOADFILE", "GAMENOTLOADED", "COLONNOTFOUND", "ENDNOTFOUND", "CANTINCFILE",
         "CANTADDACTION", "CANTADDOBJECT", "CANTADDMENUITEM", "LOCNOTFOUND", "LABELNOTFOUND",
         "INCORRECTNAME", "QUOTNOTFOUND", "BRACKETNOTFOUND", "SYNTAX", "UNKNOWNACTION",
-        "ARGSCOUNT", "TOOMANYVARS", "INCORRECTREGEXP", "CODENOTFOUND", "LOOPWHILENOTFOUND"
+        "ARGSCOUNT", "TOOMANYVARS", "INCORRECTREGEXP", "CODENOTFOUND", "LOOPWHILENOTFOUND",
+        "HOSTFUNCFAILED", "HOSTFUNCNOTFOUND", "INCORRECTVERSION"
     };
     static char buf[32];
-    if (num >= QSP_ERR_INTERNAL && num <= QSP_ERR_LOOPWHILENOTFOUND) return names[num - QSP_ERR_INTERNAL];
+    if (num >= QSP_ERR_INTERNAL && num <= QSP_ERR_INCORRECTVERSION) return names[num - QSP_ERR_INTERNAL];
     snprintf(buf, sizeof(buf), "%d", num);
     return buf;
 }
@@ -948,6 +965,9 @@ static void afterCall(QSP_BOOL isOk)
         sbAddf(&sb, "', line %d, local %d, action %d) ", info.TopLineNum, info.IntLineNum, info.ActIndex);
         addEscaped(&sb, info.IntLine);
         T.PendingError = sbTake(&sb);
+        free(T.LastErrorDesc);
+        addEscaped(&sb, info.ErrorDesc);
+        T.LastErrorDesc = sbTake(&sb);
     }
 }
 
@@ -1092,6 +1112,89 @@ static int parseLiteral(const char **str, StrBuf *out)
     return 1;
 }
 
+static int parseVariant(const char **str, QSPVariant *v)
+{
+    StrBuf canonical = {0};
+    const char *s = *str, *pos;
+    int isOk;
+    memset(v, 0, sizeof(QSPVariant));
+    while (*s == ' ') ++s;
+    if (*s == '[')
+    {
+        ++s;
+        v->Type = QSP_TYPE_TUPLE;
+        while (*s == ' ') ++s;
+        if (*s != ']')
+        {
+            while (1)
+            {
+                v->Val.Tuple.Vals = xrealloc(v->Val.Tuple.Vals, (v->Val.Tuple.ValsCount + 1) * sizeof(QSPVariant));
+                if (!parseVariant(&s, v->Val.Tuple.Vals + v->Val.Tuple.ValsCount)) return 0;
+                ++v->Val.Tuple.ValsCount;
+                while (*s == ' ') ++s;
+                if (*s == ',')
+                {
+                    ++s;
+                    continue;
+                }
+                if (*s == ']') break;
+                return 0;
+            }
+        }
+        *str = s + 1;
+        return 1;
+    }
+    /* Numbers, strings & ? go through the canonical form */
+    pos = s;
+    isOk = parseLiteral(&pos, &canonical);
+    if (isOk)
+    {
+        const char *text = sbStr(&canonical);
+        if (*text == '\'')
+        {
+            /* The canonical string: quotes are doubled, the escapes are kept */
+            StrBuf raw = {0};
+            char *unescaped;
+            QSP_CHAR *qText;
+            for (++text; text[1]; ++text)
+            {
+                if (*text == '\'') ++text;
+                sbAddN(&raw, text, 1);
+            }
+            unescaped = unescape(sbStr(&raw));
+            qText = toQsp(unescaped);
+            v->Type = QSP_TYPE_STR;
+            v->Val.Str = QSPStringFromC(qText);
+            free(unescaped);
+            free(raw.Data);
+        }
+        else if (*text != '?')
+        {
+            v->Type = QSP_TYPE_NUM;
+            v->Val.Num = (QSP_BIGINT)strtoll(text, 0, 10);
+        }
+        *str = pos;
+    }
+    free(canonical.Data);
+    return isOk;
+}
+
+static void freeVariant(QSPVariant *v)
+{
+    int i;
+    switch (v->Type)
+    {
+    case QSP_TYPE_STR:
+        free(v->Val.Str.Str);
+        break;
+    case QSP_TYPE_TUPLE:
+        for (i = 0; i < v->Val.Tuple.ValsCount; ++i) freeVariant(v->Val.Tuple.Vals + i);
+        free(v->Val.Tuple.Vals);
+        break;
+    }
+    memset(v, 0, sizeof(QSPVariant));
+}
+
 static void execSilently(const char *code)
 {
     QSP_CHAR *qCode = toQsp(code);
@@ -1130,6 +1233,272 @@ static int evalExpr(const char *expr, char **res)
 }
 
 /* ------------------------------------------------------------ */
+/* Host functions: every call becomes the event "host NAME [ARGS]", the replies script the calls */
+
+static const char *skipSpaces(const char *s);
+static const char *command(const char *line, const char *name);
+static void freeStrings(char ***items, int *count);
+
+static int isDbFunc(const char *name)
+{
+    return !strcmp(name, "qsp.db.get") || !strcmp(name, "qsp.db.set") || !strcmp(name, "qsp.db.del");
+}
+
+static void formatArgs(StrBuf *sb, QSPVariant *args, int count)
+{
+    int i;
+    sbAdd(sb, "[");
+    for (i = 0; i < count; ++i)
+    {
+        if (i) sbAdd(sb, ", ");
+        formatVariant(sb, args + i);
+    }
+    sbAdd(sb, "]");
+}
+
+static void setResult(QSPVariant *result, QSPVariant *value)
+{
+    switch (value->Type)
+    {
+    case QSP_TYPE_NUM:
+        QSPSetResultNum(result, value->Val.Num);
+        break;
+    case QSP_TYPE_STR:
+        QSPSetResultStr(result, value->Val.Str);
+        break;
+    case QSP_TYPE_TUPLE:
+        QSPSetResultTuple(result, value->Val.Tuple.Vals, value->Val.Tuple.ValsCount);
+        break;
+    }
+}
+
+/* qsp.db: the formatted key of a value */
+static int findDbKey(QSPVariant *key, int toCreate)
+{
+    StrBuf sb = {0};
+    int i;
+    formatVariant(&sb, key);
+    for (i = 0; i < T.DbCount; ++i)
+    {
+        if (!strcmp(T.DbKeys[i], sbStr(&sb)))
+        {
+            free(sb.Data);
+            return i;
+        }
+    }
+    if (!toCreate)
+    {
+        free(sb.Data);
+        return -1;
+    }
+    T.DbKeys = xrealloc(T.DbKeys, (T.DbCount + 1) * sizeof(char *));
+    T.DbValues = xrealloc(T.DbValues, (T.DbCount + 1) * sizeof(char *));
+    T.DbKeys[T.DbCount] = sbTake(&sb);
+    T.DbValues[T.DbCount] = xstrdup("?");
+    return T.DbCount++;
+}
+
+static void callDb(HostFunc *func, QSPVariant *args, QSPVariant *result)
+{
+    int index;
+    if (!strcmp(func->Name, "qsp.db.get"))
+    {
+        index = findDbKey(args, 0);
+        if (index >= 0)
+        {
+            QSPVariant value;
+            const char *text = T.DbValues[index];
+            if (parseVariant(&text, &value))
+            {
+                setResult(result, &value);
+                freeVariant(&value);
+            }
+        }
+    }
+    else if (!strcmp(func->Name, "qsp.db.set"))
+    {
+        StrBuf sb = {0};
+        index = findDbKey(args, 1);
+        formatVariant(&sb, args + 1);
+        free(T.DbValues[index]);
+        T.DbValues[index] = sbTake(&sb);
+    }
+    else if ((index = findDbKey(args, 0)) >= 0)
+    {
+        /* qsp.db.del */
+        free(T.DbKeys[index]);
+        free(T.DbValues[index]);
+        --T.DbCount;
+        T.DbKeys[index] = T.DbKeys[T.DbCount];
+        T.DbValues[index] = T.DbValues[T.DbCount];
+    }
+}
+
+static QSP_BOOL callHost(int funcIndex, QSPVariant *args, int count, QSPVariant *result)
+{
+    HostFunc *func = T.HostFuncs + funcIndex;
+    StrBuf sb = {0};
+    QSP_BOOL isOk = QSP_TRUE;
+    sbAddf(&sb, "host %s ", func->Name);
+    formatArgs(&sb, args, count);
+    addEvent(sbStr(&sb));
+    sbClear(&sb);
+    if (func->IsDb)
+        callDb(func, args, result);
+    if (func->RepliesCount)
+    {
+        const char *reply = func->Replies[0], *value;
+        if ((value = command(reply, "=>")))
+        {
+            QSPVariant v;
+            if (!parseVariant(&value, &v) || *skipSpaces(value))
+                fail("incorrect reply '%s'", reply);
+            else if (result)
+                setResult(result, &v);
+            freeVariant(&v);
+        }
+        else if (command(reply, "fail"))
+            isOk = QSP_FALSE;
+        else if ((value = command(reply, "exec")))
+        {
+            /* The host functions can't execute code */
+            QSP_CHAR *qCode = toQsp(value);
+            sbAddf(&sb, "host-exec %d", QSPExecString(QSPStringFromC(qCode), QSP_FALSE) ? 1 : 0);
+            addEvent(sbStr(&sb));
+            free(qCode);
+        }
+        else if ((value = command(reply, "read")))
+        {
+            /* Reading the state is allowed */
+            sbAddf(&sb, "read %s => ", value);
+            readVariable(&sb, value);
+            addEvent(sbStr(&sb));
+        }
+        else if (!command(reply, "ok"))
+            fail("unknown reply '%s'", reply);
+        shiftStrings(func->Replies, &func->RepliesCount);
+    }
+    free(sb.Data);
+    return isOk;
+}
+
+static QSP_BOOL cbHostFunc(QSPVariant *args, int count, QSPVariant *result, void *userData)
+{
+    return callHost((int)(intptr_t)userData, args, count, result);
+}
+
+static QSP_BOOL cbHostStat(QSPVariant *args, int count, void *userData)
+{
+    return callHost((int)(intptr_t)userData, args, count, 0);
+}
+
+static int parseResType(const char *s)
+{
+    if (!*s || !strcmp(s, "?")) return QSP_TYPE_UNDEF;
+    if (!strcmp(s, "#")) return QSP_TYPE_NUM;
+    if (!strcmp(s, "$")) return QSP_TYPE_STR;
+    if (!strcmp(s, "%")) return QSP_TYPE_TUPLE;
+    return atoi(s); /* any other type by its number */
+}
+
+/* @host-func [!] NAME MIN MAX [TYPE], @host-stat [!] NAME MIN MAX, "!" expects a refusal */
+static void registerHostFunc(const char *arg, int isStatement)
+{
+    char name[MAX_LINE], type[16] = "";
+    int minArgs, maxArgs, isRefusal = 0, isOk;
+    QSP_CHAR *qName;
+    HostFunc *func;
+    arg = skipSpaces(arg);
+    if (*arg == '!')
+    {
+        isRefusal = 1;
+        arg = skipSpaces(arg + 1);
+    }
+    if (sscanf(arg, "%4095s %d %d %15s", name, &minArgs, &maxArgs, type) < 3)
+    {
+        fail("expected 'NAME MIN MAX [TYPE]'");
+        return;
+    }
+    T.HostFuncs = xrealloc(T.HostFuncs, (T.HostFuncsCount + 1) * sizeof(HostFunc));
+    func = T.HostFuncs + T.HostFuncsCount;
+    memset(func, 0, sizeof(HostFunc));
+    func->Name = xstrdup(name);
+    func->IsStatement = isStatement;
+    func->IsDb = isDbFunc(name);
+    qName = toQsp(name);
+    if (isStatement)
+        isOk = QSPRegisterStatement(QSPStringFromC(qName), minArgs, maxArgs, cbHostStat, (void *)(intptr_t)T.HostFuncsCount);
+    else
+        isOk = QSPRegisterFunction(QSPStringFromC(qName), minArgs, maxArgs, (QSP_TINYINT)parseResType(type), cbHostFunc, (void *)(intptr_t)T.HostFuncsCount);
+    free(qName);
+    ++T.HostFuncsCount;
+    if (isOk == isRefusal)
+        fail("registration of %s: expected %s", name, isRefusal ? "a refusal" : "a success");
+}
+
+/* @host-profile [!] NAME VERSION */
+static void registerHostProfile(const char *arg)
+{
+    char name[MAX_LINE], version[MAX_LINE] = "";
+    int isRefusal = 0, isOk;
+    QSP_CHAR *qName, *qVersion;
+    arg = skipSpaces(arg);
+    if (*arg == '!')
+    {
+        isRefusal = 1;
+        arg = skipSpaces(arg + 1);
+    }
+    if (sscanf(arg, "%4095s %4095s", name, version) < 1)
+    {
+        fail("expected 'NAME VERSION'");
+        return;
+    }
+    qName = toQsp(name);
+    qVersion = toQsp(version);
+    isOk = QSPRegisterProfile(QSPStringFromC(qName), QSPStringFromC(qVersion));
+    free(qName);
+    free(qVersion);
+    if (isOk == isRefusal)
+        fail("registration of profile %s: expected %s", name, isRefusal ? "a refusal" : "a success");
+}
+
+/* @host-reply NAME ACTION */
+static void addHostReply(const char *arg)
+{
+    char name[MAX_LINE];
+    int i;
+    if (sscanf(arg, "%4095s", name) < 1)
+    {
+        fail("expected 'NAME ACTION'");
+        return;
+    }
+    for (i = 0; i < T.HostFuncsCount; ++i)
+    {
+        if (!strcmp(T.HostFuncs[i].Name, name))
+        {
+            HostFunc *func = T.HostFuncs + i;
+            func->Replies = xrealloc(func->Replies, (func->RepliesCount + 1) * sizeof(char *));
+            func->Replies[func->RepliesCount++] = xstrdup(skipSpaces(skipSpaces(arg) + strlen(name)));
+            return;
+        }
+    }
+    fail("unknown host function '%s'", name);
+}
+
+static void freeHostFuncs(void)
+{
+    int i;
+    for (i = 0; i < T.HostFuncsCount; ++i)
+    {
+        free(T.HostFuncs[i].Name);
+        freeStrings(&T.HostFuncs[i].Replies, &T.HostFuncs[i].RepliesCount);
+    }
+    free(T.HostFuncs);
+    T.HostFuncs = 0;
+    T.HostFuncsCount = 0;
+}
+
+/* ------------------------------------------------------------ */
 /* Test lifecycle */
 
 static void freeStrings(char ***items, int *count)
@@ -1157,9 +1526,16 @@ static void resetEngine(void)
     clearEvents();
     free(T.PendingError);
     T.PendingError = 0;
+    free(T.LastErrorDesc);
+    T.LastErrorDesc = 0;
     freeStrings(&T.InputReplies, &T.InputRepliesCount);
     freeStrings(&T.VersionReplies, &T.VersionRepliesCount);
     freeStrings(&T.MsgWatches, &T.MsgWatchesCount);
+    freeHostFuncs();
+    for (i = 0; i < T.DbCount; ++i) free(T.DbValues[i]);
+    free(T.DbValues);
+    T.DbValues = 0;
+    freeStrings(&T.DbKeys, &T.DbCount);
     T.MenuRepliesCount = 0;
     T.IsPlayRepliesCount = 0;
     T.MsCount = 0;
@@ -1492,6 +1868,30 @@ static void runCommand(const char *line, char **block, int blockCount)
         checkNoPendingError();
         loadFromFile(arg);
     }
+    else if ((arg = command(line, "@host-func")))
+        registerHostFunc(arg, 0);
+    else if ((arg = command(line, "@host-stat")))
+        registerHostFunc(arg, 1);
+    else if ((arg = command(line, "@host-profile")))
+        registerHostProfile(arg);
+    else if ((arg = command(line, "@host-reply")))
+        addHostReply(arg);
+    else if ((arg = command(line, "@host-db")))
+    {
+        /* The standard profile qsp.db over the store of the runner */
+        registerHostFunc("qsp.db.get 1 1", 0);
+        registerHostFunc("qsp.db.set 2 2", 1);
+        registerHostFunc("qsp.db.del 1 1", 1);
+        registerHostProfile("qsp.db 1.0.0");
+    }
+    else if ((arg = command(line, "@reinit")))
+    {
+        QSPTerminate();
+        QSPInit();
+        setCallbacks();
+        freeHostFuncs();
+        T.IsGameLoaded = 0;
+    }
     else if ((arg = command(line, "@watch-msg")))
     {
         T.MsgWatches = xrealloc(T.MsgWatches, (T.MsgWatchesCount + 1) * sizeof(char *));
@@ -1542,6 +1942,22 @@ static void runCommand(const char *line, char **block, int blockCount)
         }
         else if ((value = command(arg, "error")))
             expectError(value);
+        else if ((value = command(arg, "same-saves")))
+        {
+            char first[MAX_LINE], second[MAX_LINE];
+            SaveSlot *slot1, *slot2;
+            if (sscanf(value, "%4095s %4095s", first, second) < 2)
+                fail("expected 'same-saves SLOT1 SLOT2'");
+            else if (!(slot1 = findSave(first, 0)) || !(slot2 = findSave(second, 0)))
+                fail("unknown save slot");
+            else if (slot1->Size != slot2->Size || memcmp(slot1->Data, slot2->Data, (size_t)slot1->Size))
+                fail("saves %s and %s differ", first, second);
+        }
+        else if ((value = command(arg, "error-desc")))
+        {
+            if (!T.LastErrorDesc || strcmp(T.LastErrorDesc, value))
+                fail("error description: expected '%s', got '%s'", value, T.LastErrorDesc ? T.LastErrorDesc : "");
+        }
         else if ((value = command(arg, "event")))
         {
             if (!countEvents(value, 1)) fail("expected event '%s'", value);
