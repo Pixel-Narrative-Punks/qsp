@@ -509,6 +509,29 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCode(JNIEnv *e
     if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
     return JNI_TRUE;
 }
+/* Execute code of the specified location with ARGS (an incoming event of the host), refused inside the callbacks */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCodeWithArgs(JNIEnv *env, jobject api, jstring name, jobjectArray args, jboolean toRefreshUI)
+{
+    QSP_BOOL res;
+    QSPString locName;
+    jobject jniItem;
+    QSPVariant eventArgs[QSP_MAXSTATARGS];
+    int i, count = (args ? (*env)->GetArrayLength(env, args) : 0);
+    if (!name || qspIsInCallback || count > QSP_MAXSTATARGS) return JNI_FALSE;
+    for (i = 0; i < count; ++i)
+    {
+        jniItem = (*env)->GetObjectArrayElement(env, args, i);
+        eventArgs[i] = qspFromJavaVariant(env, jniItem);
+        if (jniItem) (*env)->DeleteLocalRef(env, jniItem);
+    }
+    locName = qspFromJavaString(env, name);
+    res = qspExecHostEvent(locName, eventArgs, count);
+    qspFreeString(&locName);
+    qspFreeVariants(eventArgs, count);
+    if (!res) return JNI_FALSE;
+    if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
+    return JNI_TRUE;
+}
 /* Execute code of the special "COUNTER" location */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execCounter(JNIEnv *env, jobject api, jboolean toRefreshUI)
 {

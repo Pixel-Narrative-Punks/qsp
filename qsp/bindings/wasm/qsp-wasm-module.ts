@@ -175,6 +175,12 @@ export interface QspWasmModule {
   ): Bool;
   _QSPCalculateNumExpression(expression: CharsPtr, res: IntPtr, toRefreshUI: Bool): Bool;
   _QSPExecLocationCode(name: CharsPtr, toRefreshUI: Bool): Bool;
+  _QSPExecLocationCodeWithArgs(
+    name: CharsPtr,
+    args: VariantPtr | 0, // QSPVariant[count]
+    count: number,
+    toRefreshUI: Bool,
+  ): Bool;
   _QSPExecCounter(toRefreshUI: Bool): Bool;
   _QSPExecUserInput(text: CharsPtr, toRefreshUI: Bool): Bool;
 

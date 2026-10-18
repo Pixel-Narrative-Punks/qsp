@@ -64,5 +64,6 @@
     void qspFunctionHostFunc(QSPVariant *args, QSP_TINYINT count, QSPVariant *res);
     void qspFunctionHostProfile(QSPVariant *args, QSP_TINYINT count, QSPVariant *res);
     void qspFunctionHostProfileMin(QSPVariant *args, QSP_TINYINT count, QSPVariant *res);
+    QSP_BOOL qspExecHostEvent(QSPString locName, QSPVariant *args, int count);
 
 #endif

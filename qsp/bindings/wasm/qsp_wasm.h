@@ -72,6 +72,7 @@
     QSP_WASM_EXPORT QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI);
     QSP_WASM_EXPORT QSP_BOOL QSPExecUserInput(QSP_CHAR *text, QSP_BOOL toRefreshUI);
     QSP_WASM_EXPORT QSP_BOOL QSPExecLocationCode(QSP_CHAR *name, QSP_BOOL toRefreshUI);
+    QSP_WASM_EXPORT QSP_BOOL QSPExecLocationCodeWithArgs(QSP_CHAR *name, QSPVariant *args, int count, QSP_BOOL toRefreshUI);
     /* Errors */
     QSP_WASM_EXPORT void QSPGetLastErrorData(QSPErrorInfo *error);
     QSP_WASM_EXPORT void QSPGetErrorDesc(int errorNum, QSPString *desc);

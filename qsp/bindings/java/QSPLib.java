@@ -168,6 +168,7 @@ public abstract class QSPLib {
     public native String calculateStrExpr(String expression, boolean toRefreshUI);
     public native long calculateNumExpr(String expression, boolean toRefreshUI);
     public native boolean execLocationCode(String name, boolean toRefreshUI);
+    public native boolean execLocationCodeWithArgs(String name, Variant[] args, boolean toRefreshUI);
     public native boolean execCounter(boolean toRefreshUI);
     public native boolean execUserInput(boolean toRefreshUI);
     public native ErrorInfo getLastErrorData();

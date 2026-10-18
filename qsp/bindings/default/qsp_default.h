@@ -121,6 +121,8 @@
     QSP_EXTERN QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI);
     QSP_EXTERN QSP_BOOL QSPExecUserInput(QSP_BOOL toRefreshUI);
     QSP_EXTERN QSP_BOOL QSPExecLocationCode(QSPString name, QSP_BOOL toRefreshUI);
+    /* Incoming events */
+    QSP_EXTERN QSP_BOOL QSPExecLocationCodeWithArgs(QSPString name, QSPVariant *args, int count, QSP_BOOL toRefreshUI);
     /* Errors */
     QSP_EXTERN QSPErrorInfo QSPGetLastErrorData(void);
     QSP_EXTERN QSPString QSPGetErrorDesc(int errorNum);

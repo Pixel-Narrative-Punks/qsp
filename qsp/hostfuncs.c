@@ -7,7 +7,9 @@
 
 #include "hostfuncs.h"
 #include "callbacks.h"
+#include "common.h"
 #include "errors.h"
+#include "locations.h"
 #include "memory.h"
 #include "statements.h"
 #include "text.h"
@@ -482,4 +484,18 @@ void qspFunctionHostProfileMin(QSPVariant *args, QSP_TINYINT QSP_UNUSED(count), 
     QSP_PNUM(res) = QSP_TOBOOL(profile && profile->VersionParts[0] == parts[0] &&
         qspCompareHostVersions(profile->VersionParts, parts) >= 0);
     qspFreeString(&name);
+}
+
+QSP_BOOL qspExecHostEvent(QSPString locName, QSPVariant *args, int count)
+{
+    int i;
+    QSPVariant eventArgs[QSP_MAXSTATARGS];
+    if (qspIsInCallback || count < 0 || count > QSP_MAXSTATARGS || (count && !args)) return QSP_FALSE;
+    for (i = 0; i < count; ++i)
+        qspCopyToNewVariant(eventArgs + i, args + i);
+    qspNormalizeHostValues(eventArgs, count);
+    qspPrepareExecution(QSP_FALSE);
+    qspExecLocByNameWithArgs(locName, eventArgs, (QSP_TINYINT)count, QSP_FALSE, 0);
+    qspFreeVariants(eventArgs, count);
+    return (QSP_BOOL)(qspErrorNum == 0);
 }

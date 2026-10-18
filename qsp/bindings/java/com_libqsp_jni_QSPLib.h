@@ -233,6 +233,14 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCode
 
 /*
  * Class:     com_libqsp_jni_QSPLib
+ * Method:    execLocationCodeWithArgs
+ * Signature: (Ljava/lang/String;[Lcom/libqsp/jni/QSPLib$Variant;Z)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCodeWithArgs
+  (JNIEnv *, jobject, jstring, jobjectArray, jboolean);
+
+/*
+ * Class:     com_libqsp_jni_QSPLib
  * Method:    execCounter
  * Signature: (Z)Z
  */

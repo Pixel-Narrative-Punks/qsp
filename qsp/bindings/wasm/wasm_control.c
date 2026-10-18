@@ -332,6 +332,13 @@ QSP_BOOL QSPExecLocationCode(QSP_CHAR *name, QSP_BOOL toRefreshUI)
     return QSP_TRUE;
 }
 
+QSP_BOOL QSPExecLocationCodeWithArgs(QSP_CHAR *name, QSPVariant *args, int count, QSP_BOOL toRefreshUI)
+{
+    if (!qspExecHostEvent(qspStringFromC(name), args, count)) return QSP_FALSE;
+    if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
+    return QSP_TRUE;
+}
+
 QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI)
 {
     if (qspIsInHostCall) return QSP_FALSE;

@@ -410,6 +410,13 @@ QSP_BOOL QSPExecLocationCode(QSPString name, QSP_BOOL toRefreshUI)
     if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
     return QSP_TRUE;
 }
+/* Execute code of the specified location with ARGS (an incoming event of the host), refused inside the callbacks */
+QSP_BOOL QSPExecLocationCodeWithArgs(QSPString name, QSPVariant *args, int count, QSP_BOOL toRefreshUI)
+{
+    if (!qspExecHostEvent(name, args, count)) return QSP_FALSE;
+    if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
+    return QSP_TRUE;
+}
 /* Execute code of the special "COUNTER" location */
 QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI)
 {
