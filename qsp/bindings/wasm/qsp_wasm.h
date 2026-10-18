@@ -85,6 +85,10 @@
     QSP_WASM_EXPORT QSP_BOOL QSPGetVarValuesCount(QSP_CHAR *name, int *count);
     QSP_WASM_EXPORT QSP_BOOL QSPGetVarIndexByKey(QSP_CHAR *name, QSPVariant *key, int *ind);
     QSP_WASM_EXPORT QSP_BOOL QSPGetVarValue(QSP_CHAR *name, int ind, QSPVariant *value, QSPVariant *key);
+    /* Host functions */
+    QSP_WASM_EXPORT QSP_BOOL QSPRegisterFunction(QSP_CHAR *name, int minArgs, int maxArgs, int resultType);
+    QSP_WASM_EXPORT QSP_BOOL QSPRegisterStatement(QSP_CHAR *name, int minArgs, int maxArgs);
+    QSP_WASM_EXPORT QSP_BOOL QSPRegisterProfile(QSP_CHAR *name, QSP_CHAR *version);
     /* Sanitizer builds */
     QSP_WASM_EXPORT void QSPRunChecks(void);
 

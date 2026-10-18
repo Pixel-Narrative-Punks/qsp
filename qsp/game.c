@@ -12,6 +12,7 @@
 #include "coding.h"
 #include "common.h"
 #include "errors.h"
+#include "hostfuncs.h"
 #include "locations.h"
 #include "mathops.h"
 #include "objects.h"
@@ -195,6 +196,7 @@ QSP_BOOL qspOpenGame(void *data, int dataSize, QSP_BOOL isNewGame)
     QSPLocation *curLoc;
     QSPLocAct *curAct;
     QSPString str, gameString, *strs;
+    qspIsHostRegistryLocked = QSP_TRUE;
     crc = (isNewGame ? qspCRC(data, dataSize) : 0);
     isUCS = (dataSize >= 2 && *((unsigned char *)data + 1) == 0);
     gameString = qspStringFromFileData(data, dataSize, isUCS);

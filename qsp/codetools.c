@@ -6,6 +6,7 @@
  */
 
 #include "codetools.h"
+#include "hostfuncs.h"
 #include "statements.h"
 #include "text.h"
 #include "variables.h"
@@ -15,6 +16,7 @@ QSPCachedCodeBlocksBucket qspCachedCodeBlocks[QSP_CACHEDCODEBUCKETS];
 
 INLINE int qspStatStringCompare(const void *name, const void *compareTo);
 INLINE QSP_TINYINT qspGetStatCode(QSPString s, QSP_CHAR **pos);
+INLINE QSP_TINYINT qspGetUnnamedStatCode(QSPString str, QSP_CHAR *statDelimPos);
 INLINE void qspInitArg(QSPCachedArg *arg, QSPString s);
 INLINE void qspInitStatData(QSPCachedStat *stat, QSPString s, QSPString lineStr);
 INLINE QSPCachedAssignment *qspNewAssignment(QSP_TINYINT statCode, QSPString s, QSP_TINYINT *errorCode);
@@ -26,6 +28,8 @@ INLINE QSPCachedArg *qspNewRegularArgs(QSP_TINYINT statCode, QSPString s, QSP_TI
 INLINE int qspInitAssignmentTargets(QSPCachedTarget *targets, QSPString names, QSP_TINYINT *errorCode);
 INLINE void qspInitAssignmentTarget(QSPCachedTarget *target, QSPString s, QSP_TINYINT *errorCode);
 INLINE QSP_TINYINT qspAppendRegularArgs(QSPCachedArg *foundArgs, QSP_TINYINT argsCount, QSP_TINYINT statCode, QSPString s, QSP_TINYINT *errorCode);
+INLINE QSP_TINYINT qspAppendArgs(QSPCachedArg *foundArgs, QSP_TINYINT argsCount, int minArgs, int maxArgs, QSPString s, QSP_TINYINT *errorCode);
+INLINE QSPCachedArg *qspNewHostCallArgs(QSPString s, QSP_TINYINT *argsCount, QSP_TINYINT *errorCode);
 INLINE QSPCachedArg *qspCopyToNewArgs(QSPCachedArg *foundArgs, QSP_TINYINT argsCount);
 INLINE void qspFreeArg(QSPCachedArg *arg);
 INLINE void qspFreeArgs(QSPCachedArg *args, int count);
@@ -68,6 +72,14 @@ INLINE QSP_TINYINT qspGetStatCode(QSPString s, QSP_CHAR **pos)
         }
     }
     return qspStatUnknown;
+}
+
+INLINE QSP_TINYINT qspGetUnnamedStatCode(QSPString str, QSP_CHAR *statDelimPos)
+{
+    /* A statement of the host, an assignment or an expression */
+    QSPString s = (statDelimPos ? qspStringFromPair(str.Str, statDelimPos) : str);
+    if (qspIsHostStatementCall(s)) return qspStatHostCall;
+    return (qspDelimPos(s, QSP_EQUAL_CHAR) ? qspStatSet : qspStatImplicitStatement);
 }
 
 INLINE void qspInitArg(QSPCachedArg *arg, QSPString s)
@@ -125,6 +137,9 @@ INLINE void qspInitStatData(QSPCachedStat *stat, QSPString s, QSPString lineStr)
         break;
     case qspStatUserCall:
         stat->Data.Args = qspNewUserCallArgs(s, &stat->ArgsCount, &stat->ErrorCode);
+        break;
+    case qspStatHostCall:
+        stat->Data.Args = qspNewHostCallArgs(s, &stat->ArgsCount, &stat->ErrorCode);
         break;
     case qspStatAct:
         stat->Data.Act = qspNewAct(s, &stat->ArgsCount, &stat->ErrorCode);
@@ -234,6 +249,36 @@ INLINE QSPCachedArg *qspNewUserCallArgs(QSPString s, QSP_TINYINT *argsCount, QSP
     return qspCopyToNewArgs(foundArgs, count);
 }
 
+INLINE QSPCachedArg *qspNewHostCallArgs(QSPString s, QSP_TINYINT *argsCount, QSP_TINYINT *errorCode)
+{
+    int index;
+    QSP_TINYINT count;
+    QSPString name;
+    QSPCachedArg foundArgs[QSP_MAXSTATARGS + 1];
+    qspSkipSpaces(&s);
+    name = qspParseName(&s);
+    index = qspHostFuncIndex(name);
+    if (index < 0)
+    {
+        foundArgs[0].Data.Text = name;
+        foundArgs[0].Type = qspArgString;
+        *argsCount = 1;
+        return qspCopyToNewArgs(foundArgs, 1);
+    }
+    qspSkipSpaces(&s);
+    if (!qspIsEmpty(s) && *s.Str == QSP_EQUAL_CHAR)
+    {
+        *errorCode = QSP_ERR_INCORRECTNAME;
+        return 0;
+    }
+    foundArgs[0].Data.Number = index; /* the index goes first */
+    foundArgs[0].Type = qspArgNumber;
+    count = qspAppendArgs(foundArgs, 1, qspHostFuncs[index].MinArgsCount + 1, qspHostFuncs[index].MaxArgsCount + 1, s, errorCode);
+    if (*errorCode) return 0;
+    *argsCount = count;
+    return qspCopyToNewArgs(foundArgs, count);
+}
+
 INLINE QSPCachedAct *qspNewAct(QSPString s, QSP_TINYINT *argsCount, QSP_TINYINT *errorCode)
 {
     QSPCachedAct *act;
@@ -330,11 +375,16 @@ INLINE void qspInitAssignmentTarget(QSPCachedTarget *target, QSPString s, QSP_TI
     }
 
     name = qspPrepareVarName(target->Name, &nameHash); /* validates the name */
-    if (qspIsEmpty(name))
+    if (qspIsEmpty(name) || qspHostFuncIndex(name) >= 0) /* can't assign to a function of the host */
         *errorCode = QSP_ERR_INCORRECTNAME;
 }
 
 INLINE QSP_TINYINT qspAppendRegularArgs(QSPCachedArg *foundArgs, QSP_TINYINT argsCount, QSP_TINYINT statCode, QSPString s, QSP_TINYINT *errorCode)
+{
+    return qspAppendArgs(foundArgs, argsCount, qspStats[statCode].MinArgsCount, qspStats[statCode].MaxArgsCount, s, errorCode);
+}
+
+INLINE QSP_TINYINT qspAppendArgs(QSPCachedArg *foundArgs, QSP_TINYINT argsCount, int minArgs, int maxArgs, QSPString s, QSP_TINYINT *errorCode)
 {
     qspSkipSpaces(&s);
     if (!qspIsEmpty(s))
@@ -359,7 +409,7 @@ INLINE QSP_TINYINT qspAppendRegularArgs(QSPCachedArg *foundArgs, QSP_TINYINT arg
             QSP_CHAR *pos;
             while (1)
             {
-                if (argsCount >= qspStats[statCode].MaxArgsCount)
+                if (argsCount >= maxArgs)
                 {
                     *errorCode = QSP_ERR_ARGSCOUNT;
                     break;
@@ -386,7 +436,7 @@ INLINE QSP_TINYINT qspAppendRegularArgs(QSPCachedArg *foundArgs, QSP_TINYINT arg
             }
         }
     }
-    if (argsCount < qspStats[statCode].MinArgsCount)
+    if (argsCount < minArgs)
         *errorCode = QSP_ERR_ARGSCOUNT;
     return argsCount;
 }
@@ -468,13 +518,7 @@ void qspInitLineOfCode(QSPLineOfCode *line, QSPString str, int lineNum)
             else
                 toSearchElse = QSP_FALSE;
             if (statCode == qspStatUnknown && str.Str != statDelimPos)
-            {
-                if (statDelimPos)
-                    temp = qspDelimPos(qspStringFromPair(str.Str, statDelimPos), QSP_EQUAL_CHAR);
-                else
-                    temp = qspDelimPos(str, QSP_EQUAL_CHAR);
-                statCode = (temp ? qspStatSet : qspStatImplicitStatement);
-            }
+                statCode = qspGetUnnamedStatCode(str, statDelimPos);
             break;
         }
         while (statDelimPos && nextPos)
@@ -542,13 +586,7 @@ void qspInitLineOfCode(QSPLineOfCode *line, QSPString str, int lineNum)
                         elsePos = 0;
                     }
                     if (statCode == qspStatUnknown && str.Str != statDelimPos)
-                    {
-                        if (statDelimPos)
-                            temp = qspDelimPos(qspStringFromPair(str.Str, statDelimPos), QSP_EQUAL_CHAR);
-                        else
-                            temp = qspDelimPos(str, QSP_EQUAL_CHAR);
-                        statCode = (temp ? qspStatSet : qspStatImplicitStatement);
-                    }
+                        statCode = qspGetUnnamedStatCode(str, statDelimPos);
                     break;
                 }
             }

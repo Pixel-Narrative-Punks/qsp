@@ -13,9 +13,20 @@
 #include "../../actions.h"
 #include "../../common.h"
 #include "../../errors.h"
+#include "../../hostfuncs.h"
 #include "../../locations.h"
 #include "../../objects.h"
 #include "../../text.h"
+#include "../../variant.h"
+
+typedef struct
+{
+    jobject Target;
+    jmethodID Method;
+} QSPJavaHostHandler;
+
+static QSPJavaHostHandler *qspJavaHostHandlers = 0;
+static int qspJavaHostHandlersCount = 0;
 
 INLINE JNIEnv *qspGetJniEnv()
 {
@@ -23,6 +34,14 @@ INLINE JNIEnv *qspGetJniEnv()
     /* Callbacks should be called on the JVM threads only */
     (*qspJvm)->GetEnv(qspJvm, (void **)&javaEnv, JNI_VERSION_1_6);
     return javaEnv;
+}
+
+INLINE QSP_BOOL qspCheckJavaException(JNIEnv *env)
+{
+    if (!(*env)->ExceptionCheck(env)) return QSP_FALSE;
+    (*env)->ExceptionDescribe(env);
+    (*env)->ExceptionClear(env);
+    return QSP_TRUE;
 }
 
 void qspInitCallbacks(void)
@@ -421,6 +440,80 @@ QSPString qspCallVersion(QSPString param)
         qspFreeString(&res);
     }
     return qspCopyToNewText(QSP_STATIC_STR(QSP_VER));
+}
+
+QSP_BOOL qspAddJavaHostHandler(JNIEnv *env, int index, jobject target, jmethodID method)
+{
+    QSPJavaHostHandler *handler;
+    if (index < 0) return QSP_FALSE;
+    /* The indices go one by one */
+    qspJavaHostHandlers = (QSPJavaHostHandler *)realloc(qspJavaHostHandlers, (index + 1) * sizeof(QSPJavaHostHandler));
+    qspJavaHostHandlersCount = index + 1;
+    handler = qspJavaHostHandlers + index;
+    handler->Target = (*env)->NewGlobalRef(env, target);
+    handler->Method = method;
+    return QSP_TRUE;
+}
+
+QSP_BOOL qspCallHostFunction(int index, QSPVariant *args, int count, QSPVariant *res)
+{
+    /* The engine prepares the call state, a Java exception is a failure of the host */
+    int i;
+    QSP_BOOL isOk;
+    jobject jniItem;
+    jobjectArray jniArgs;
+    QSPJavaHostHandler *handler = qspJavaHostHandlers + index;
+    JNIEnv *javaEnv = qspGetJniEnv();
+
+    jniArgs = (*javaEnv)->NewObjectArray(javaEnv, count, qspVariantClass, 0);
+    if (qspCheckJavaException(javaEnv)) return QSP_FALSE;
+    for (i = 0; i < count; ++i)
+    {
+        jniItem = qspToJavaVariant(javaEnv, args + i);
+        (*javaEnv)->SetObjectArrayElement(javaEnv, jniArgs, i, jniItem);
+        (*javaEnv)->DeleteLocalRef(javaEnv, jniItem);
+    }
+    if (qspCheckJavaException(javaEnv))
+    {
+        (*javaEnv)->DeleteLocalRef(javaEnv, jniArgs);
+        return QSP_FALSE;
+    }
+
+    if (res)
+    {
+        jobject jniRes = (*javaEnv)->CallObjectMethod(javaEnv, handler->Target, handler->Method, jniArgs);
+        isOk = !qspCheckJavaException(javaEnv);
+        if (isOk && jniRes)
+        {
+            /* null means the undefined value */
+            QSPVariant value = qspFromJavaVariant(javaEnv, jniRes);
+            qspSetHostResult(res, &value);
+            qspFreeVariant(&value);
+        }
+        if (jniRes) (*javaEnv)->DeleteLocalRef(javaEnv, jniRes);
+    }
+    else
+    {
+        (*javaEnv)->CallVoidMethod(javaEnv, handler->Target, handler->Method, jniArgs);
+        isOk = !qspCheckJavaException(javaEnv);
+    }
+
+    (*javaEnv)->DeleteLocalRef(javaEnv, jniArgs);
+    return isOk;
+}
+
+void qspReleaseHostFunctions(void)
+{
+    if (qspJavaHostHandlers)
+    {
+        int i;
+        JNIEnv *javaEnv = qspGetJniEnv();
+        for (i = 0; i < qspJavaHostHandlersCount; ++i)
+            (*javaEnv)->DeleteGlobalRef(javaEnv, qspJavaHostHandlers[i].Target);
+        free(qspJavaHostHandlers);
+    }
+    qspJavaHostHandlers = 0;
+    qspJavaHostHandlersCount = 0;
 }
 
 #endif

@@ -78,6 +78,21 @@ export interface QspWasmHost {
   onInputBox?(text: string): string | Promise<string>;
   onShowMenu?(items: Ptr, count: number): number | Promise<number>; // QSPListItem[count]
   onVersion?(param: string): string | Promise<string>;
+  onHostFunction?(
+    name: string,
+    args: QspVariableValue[],
+  ): QspHostResult | null | Promise<QspHostResult | null>;
+  onHostStatement?(name: string, args: QspVariableValue[]): void | Promise<void>;
+}
+
+export type QspHostResult = string | number | boolean | undefined | Array<QspHostResult | null>;
+
+// UNDEF keeps the result as is
+export enum QspHostResultType {
+  UNDEF = 0,
+  TUPLE = 1,
+  NUM = 2,
+  STR = 4,
 }
 
 // Names of the exports without the underscore, for ccall
@@ -141,6 +156,15 @@ export interface QspWasmModule {
   _QSPGetVarValuesCount(name: CharsPtr, count: IntPtr): Bool;
   _QSPGetVarIndexByKey(name: CharsPtr, key: VariantPtr, index: IntPtr): Bool; // index -1 if none
   _QSPGetVarValue(name: CharsPtr, index: number, value: VariantPtr | 0, key: VariantPtr | 0): Bool;
+
+  _QSPRegisterFunction(
+    name: CharsPtr,
+    minArgs: number,
+    maxArgs: number,
+    resultType: QspHostResultType,
+  ): Bool;
+  _QSPRegisterStatement(name: CharsPtr, minArgs: number, maxArgs: number): Bool;
+  _QSPRegisterProfile(name: CharsPtr, version: CharsPtr): Bool; // version: major.minor.patch
 
   _QSPExecString(code: CharsPtr, toRefreshUI: Bool): Bool;
   _QSPCalculateStrExpression(

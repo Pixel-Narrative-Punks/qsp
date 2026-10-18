@@ -14,6 +14,7 @@
 #include "../../common.h"
 #include "../../errors.h"
 #include "../../game.h"
+#include "../../hostfuncs.h"
 #include "../../locations.h"
 #include "../../mathops.h"
 #include "../../menu.h"
@@ -53,6 +54,7 @@ INLINE int qspGetLinesInfo(QSPLineOfCode *line, int linesCount, QSPLineInfo *lin
 
 void QSPEnableDebugMode(QSP_BOOL isDebug)
 {
+    if (qspIsInHostCall) return;
     qspIsDebug = isDebug;
 }
 
@@ -150,6 +152,7 @@ int QSPGetActions(QSPListItem *items, int itemsBufSize)
 
 QSP_BOOL QSPSetSelActionIndex(int ind, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     if (ind >= 0 && ind < qspCurActsCount && ind != qspCurSelAction)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -163,6 +166,7 @@ QSP_BOOL QSPSetSelActionIndex(int ind, QSP_BOOL toRefreshUI)
 
 QSP_BOOL QSPExecuteSelActionCode(QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     if (qspCurSelAction >= 0)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -188,6 +192,7 @@ int QSPGetObjects(QSPObjectItem *items, int itemsBufSize)
 
 QSP_BOOL QSPSetSelObjectIndex(int ind, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     if (ind >= 0 && ind < qspCurObjsCount && ind != qspCurSelObject)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -211,6 +216,7 @@ int QSPGetWindowsChangedState(void)
 
 void QSPShowWindow(int type, QSP_BOOL toShow)
 {
+    if (qspIsInHostCall) return;
     qspSetWindowState(type, toShow);
 }
 
@@ -264,6 +270,7 @@ QSP_BOOL QSPGetVarValue(QSP_CHAR *name, int ind, QSPVariant *value, QSPVariant *
 
 QSP_BOOL QSPExecString(QSP_CHAR *s, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     qspExecStringAsCode(qspStringFromC(s));
     if (qspErrorNum) return QSP_FALSE;
@@ -277,6 +284,7 @@ QSP_BOOL QSPCalculateStrExpression(QSP_CHAR *s, QSP_CHAR *buf, int bufSize, QSP_
     int resLen;
     QSPString codeStr;
     QSPVariant value;
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     codeStr = qspCopyToNewText(qspStringFromC(s));
     qspPrepareStringToExecution(&codeStr);
@@ -297,6 +305,7 @@ QSP_BOOL QSPCalculateNumExpression(QSP_CHAR *s, QSP_BIGINT *res, QSP_BOOL toRefr
 {
     QSPString codeStr;
     QSPVariant value;
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     codeStr = qspCopyToNewText(qspStringFromC(s));
     qspPrepareStringToExecution(&codeStr);
@@ -315,6 +324,7 @@ QSP_BOOL QSPCalculateNumExpression(QSP_CHAR *s, QSP_BIGINT *res, QSP_BOOL toRefr
 
 QSP_BOOL QSPExecLocationCode(QSP_CHAR *name, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     qspExecLocByNameWithArgs(qspStringFromC(name), 0, 0, QSP_TRUE, 0);
     if (qspErrorNum) return QSP_FALSE;
@@ -324,6 +334,7 @@ QSP_BOOL QSPExecLocationCode(QSP_CHAR *name, QSP_BOOL toRefreshUI)
 
 QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     if (!qspIsInCallback)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -336,6 +347,7 @@ QSP_BOOL QSPExecCounter(QSP_BOOL toRefreshUI)
 
 QSP_BOOL QSPExecUserInput(QSP_CHAR *text, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspUpdateText(&qspCurInput, qspStringFromC(text));
     qspPrepareExecution(QSP_FALSE);
     qspExecLocByVarNameWithArgs(QSP_STATIC_STR(QSP_LOC_USERCOMMAND), 0, 0);
@@ -356,11 +368,13 @@ void QSPGetErrorDesc(int errorNum, QSPString *desc)
 
 QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize, QSP_BOOL isNewGame)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     return qspOpenGame((void *)data, dataSize, isNewGame);
 }
 
 QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     if (!qspSaveGameStatus(buf, bufSize, QSP_TRUE))
     {
@@ -377,6 +391,7 @@ QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI)
 
 QSP_BOOL QSPOpenSavedGameFromData(const void *data, int dataSize, QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     if (!qspOpenGameStatus((void *)data, dataSize)) return QSP_FALSE;
     if (qspErrorNum) return QSP_FALSE;
@@ -386,11 +401,27 @@ QSP_BOOL QSPOpenSavedGameFromData(const void *data, int dataSize, QSP_BOOL toRef
 
 QSP_BOOL QSPRestartGame(QSP_BOOL toRefreshUI)
 {
+    if (qspIsInHostCall) return QSP_FALSE;
     qspPrepareExecution(QSP_FALSE);
     if (!qspRestartGame(QSP_TRUE)) return QSP_FALSE;
     if (qspErrorNum) return QSP_FALSE;
     if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
     return QSP_TRUE;
+}
+
+QSP_BOOL QSPRegisterFunction(QSP_CHAR *name, int minArgs, int maxArgs, int resultType)
+{
+    return (QSP_BOOL)(qspAddHostFunc(qspStringFromC(name), minArgs, maxArgs, resultType, QSP_FALSE) >= 0);
+}
+
+QSP_BOOL QSPRegisterStatement(QSP_CHAR *name, int minArgs, int maxArgs)
+{
+    return (QSP_BOOL)(qspAddHostFunc(qspStringFromC(name), minArgs, maxArgs, QSP_TYPE_UNDEF, QSP_TRUE) >= 0);
+}
+
+QSP_BOOL QSPRegisterProfile(QSP_CHAR *name, QSP_CHAR *version)
+{
+    return qspAddHostProfile(qspStringFromC(name), qspStringFromC(version));
 }
 
 void QSPInit(void)

@@ -12,6 +12,7 @@
 #include "common.h"
 #include "errors.h"
 #include "game.h"
+#include "hostfuncs.h"
 #include "locations.h"
 #include "mathops.h"
 #include "memory.h"
@@ -190,6 +191,8 @@ void qspInitStats(void)
     qspAddStatement(qspStatOpenQst, qspStatementOpenQst, 1, 1, QSP_TYPE_STR);
 
     qspAddStatement(qspStatSetTimer, qspStatementSetTimer, 1, 1, QSP_TYPE_NUM);
+
+    qspAddStatement(qspStatHostCall, 0, 0, 0);
 
     /* Names */
     qspAddStatName(qspStatLabel, QSP_STATIC_STR(QSP_LABEL), QSP_FALSE, 0);
@@ -457,6 +460,10 @@ INLINE QSP_BOOL qspExecString(QSPLineOfCode *line, int startStat, int endStat, Q
             }
         case qspStatUserCall:
             qspStatementUserCall(stat);
+            if (qspLocationState != oldLocationState) return QSP_FALSE;
+            break;
+        case qspStatHostCall:
+            qspStatementHostCall(stat);
             if (qspLocationState != oldLocationState) return QSP_FALSE;
             break;
         case qspStatAct:

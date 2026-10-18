@@ -70,6 +70,9 @@
     #include "../qsp.h"
     #include "qsp_export.h"
 
+    typedef QSP_BOOL (*QSP_HOST_FUNCTION)(QSPVariant *args, int count, QSPVariant *result, void *userData);
+    typedef QSP_BOOL (*QSP_HOST_STATEMENT)(QSPVariant *args, int count, void *userData);
+
     #ifdef __cplusplus
     extern "C"
     {
@@ -134,6 +137,12 @@
     QSP_EXTERN QSP_BOOL QSPConvertValueToString(QSPVariant value, QSP_CHAR *buf, int bufSize);
     QSP_EXTERN QSP_BOOL QSPGetNumVarValue(QSPString name, int ind, QSP_BIGINT *res);
     QSP_EXTERN QSP_BOOL QSPGetStrVarValue(QSPString name, int ind, QSP_CHAR *buf, int bufSize);
+    QSP_EXTERN QSP_BOOL QSPRegisterFunction(QSPString name, int minArgs, int maxArgs, QSP_TINYINT resultType, QSP_HOST_FUNCTION func, void *userData);
+    QSP_EXTERN QSP_BOOL QSPRegisterStatement(QSPString name, int minArgs, int maxArgs, QSP_HOST_STATEMENT func, void *userData);
+    QSP_EXTERN QSP_BOOL QSPRegisterProfile(QSPString name, QSPString version);
+    QSP_EXTERN void QSPSetResultNum(QSPVariant *result, QSP_BIGINT value);
+    QSP_EXTERN void QSPSetResultStr(QSPVariant *result, QSPString value);
+    QSP_EXTERN void QSPSetResultTuple(QSPVariant *result, QSPVariant *items, int count);
 
     #ifdef __cplusplus
     }

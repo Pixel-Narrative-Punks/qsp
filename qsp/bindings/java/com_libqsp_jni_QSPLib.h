@@ -319,6 +319,30 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromFD
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_restartGame
   (JNIEnv *, jobject, jboolean);
 
+/*
+ * Class:     com_libqsp_jni_QSPLib
+ * Method:    registerFunction
+ * Signature: (Ljava/lang/String;IIILjava/lang/Object;Ljava/lang/String;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerFunction
+  (JNIEnv *, jobject, jstring, jint, jint, jint, jobject, jstring);
+
+/*
+ * Class:     com_libqsp_jni_QSPLib
+ * Method:    registerStatement
+ * Signature: (Ljava/lang/String;IILjava/lang/Object;Ljava/lang/String;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerStatement
+  (JNIEnv *, jobject, jstring, jint, jint, jobject, jstring);
+
+/*
+ * Class:     com_libqsp_jni_QSPLib
+ * Method:    registerProfile
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerProfile
+  (JNIEnv *, jobject, jstring, jstring);
+
 #ifdef __cplusplus
 }
 #endif

@@ -136,6 +136,10 @@
         qspOpIsPlay,
         qspOpMsecsCount,
         qspOpQSPVer,
+        qspOpHostFunc,
+        qspOpHostFuncExists,
+        qspOpHostProfile,
+        qspOpHostProfileMin,
 
         qspOpLast_Operation
     };
@@ -147,5 +151,6 @@
     void qspFreeMathExpression(QSPMathExpression *expression);
     QSPVariant qspCalculateValue(QSPMathExpression *expression, int itemIndex);
     QSPVariant qspCalculateExprValue(QSPString expr);
+    QSP_BOOL qspIsMathOperatorAt(QSPString s);
 
 #endif

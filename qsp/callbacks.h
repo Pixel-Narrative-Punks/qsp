@@ -53,5 +53,7 @@
     QSPString qspCallInputBox(QSPString text);
     int qspCallShowMenu(QSPListItem *items, int count);
     QSPString qspCallVersion(QSPString param);
+    QSP_BOOL qspCallHostFunction(int index, QSPVariant *args, int count, QSPVariant *res);
+    void qspReleaseHostFunctions(void);
 
 #endif

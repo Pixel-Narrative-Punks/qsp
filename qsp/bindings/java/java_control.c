@@ -14,6 +14,7 @@
 #include "../../common.h"
 #include "../../errors.h"
 #include "../../game.h"
+#include "../../hostfuncs.h"
 #include "../../locations.h"
 #include "../../mathops.h"
 #include "../../menu.h"
@@ -201,6 +202,7 @@ jobject qspToJavaVarItem(JNIEnv *env, QSPVariant *value, QSPVariant *key)
 /* Enable the debugger */
 JNIEXPORT void JNICALL Java_com_libqsp_jni_QSPLib_enableDebugMode(JNIEnv *env, jobject api, jboolean isDebug)
 {
+    if (qspIsInHostCall) return;
     qspIsDebug = (QSP_BOOL)isDebug;
 }
 /* Get current execution state */
@@ -256,7 +258,9 @@ JNIEXPORT jstring JNICALL Java_com_libqsp_jni_QSPLib_getVarsDesc(JNIEnv *env, jo
 /* Synchronize the value of the text input control */
 JNIEXPORT void JNICALL Java_com_libqsp_jni_QSPLib_setInputStrText(JNIEnv *env, jobject api, jstring val)
 {
-    QSPString str = qspFromJavaString(env, val);
+    QSPString str;
+    if (qspIsInHostCall) return;
+    str = qspFromJavaString(env, val);
     qspUpdateText(&qspCurInput, str);
     qspFreeString(&str);
 }
@@ -280,6 +284,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_libqsp_jni_QSPLib_getActions(JNIEnv *env
 /* Set index of the selected action */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_setSelActIndex(JNIEnv *env, jobject api, jint ind, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     if (ind >= 0 && ind < qspCurActsCount && ind != qspCurSelAction)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -293,6 +298,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_setSelActIndex(JNIEnv *env
 /* Execute the selected action */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execSelAction(JNIEnv *env, jobject api, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     if (qspCurSelAction >= 0)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -331,6 +337,7 @@ JNIEXPORT jobjectArray JNICALL Java_com_libqsp_jni_QSPLib_getObjects(JNIEnv *env
 /* Set index of the selected object */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_setSelObjIndex(JNIEnv *env, jobject api, jint ind, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     if (ind >= 0 && ind < qspCurObjsCount && ind != qspCurSelObject)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -355,6 +362,7 @@ JNIEXPORT jint JNICALL Java_com_libqsp_jni_QSPLib_getWindowsChangedState(JNIEnv 
 /* Synchronize visibility of a region of the UI */
 JNIEXPORT void JNICALL Java_com_libqsp_jni_QSPLib_showWindow(JNIEnv *env, jobject api, jint type, jboolean toShow)
 {
+    if (qspIsInHostCall) return;
     qspSetWindowState(type, toShow);
 }
 /* ------------------------------------------------------------ */
@@ -438,6 +446,7 @@ JNIEXPORT jstring JNICALL Java_com_libqsp_jni_QSPLib_getStrVarValue(JNIEnv *env,
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execString(JNIEnv *env, jobject api, jstring s, jboolean toRefreshUI)
 {
     QSPString codeStr;
+    if (qspIsInHostCall) return JNI_FALSE;
     qspPrepareExecution(QSP_FALSE);
     codeStr = qspFromJavaString(env, s);
     qspExecStringAsCode(codeStr);
@@ -452,6 +461,7 @@ JNIEXPORT jstring JNICALL Java_com_libqsp_jni_QSPLib_calculateStrExpr(JNIEnv *en
     jstring res;
     QSPString codeStr;
     QSPVariant value;
+    if (qspIsInHostCall) return qspToJavaString(env, qspNullString);
     qspPrepareExecution(QSP_FALSE);
     codeStr = qspFromJavaString(env, s);
     qspPrepareStringToExecution(&codeStr);
@@ -470,6 +480,7 @@ JNIEXPORT jlong JNICALL Java_com_libqsp_jni_QSPLib_calculateNumExpr(JNIEnv *env,
     QSP_BIGINT res;
     QSPString codeStr;
     QSPVariant value;
+    if (qspIsInHostCall) return 0;
     qspPrepareExecution(QSP_FALSE);
     codeStr = qspFromJavaString(env, s);
     qspPrepareStringToExecution(&codeStr);
@@ -489,6 +500,7 @@ JNIEXPORT jlong JNICALL Java_com_libqsp_jni_QSPLib_calculateNumExpr(JNIEnv *env,
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCode(JNIEnv *env, jobject api, jstring name, jboolean toRefreshUI)
 {
     QSPString locName;
+    if (qspIsInHostCall) return JNI_FALSE;
     qspPrepareExecution(QSP_FALSE);
     locName = qspFromJavaString(env, name);
     qspExecLocByNameWithArgs(locName, 0, 0, QSP_TRUE, 0);
@@ -500,6 +512,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execLocationCode(JNIEnv *e
 /* Execute code of the special "COUNTER" location */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execCounter(JNIEnv *env, jobject api, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     if (!qspIsInCallback)
     {
         qspPrepareExecution(QSP_FALSE);
@@ -512,6 +525,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execCounter(JNIEnv *env, j
 /* Execute code of the special "USERCOM" location */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_execUserInput(JNIEnv *env, jobject api, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     qspPrepareExecution(QSP_FALSE);
     qspExecLocByVarNameWithArgs(QSP_STATIC_STR(QSP_LOC_USERCOMMAND), 0, 0);
     if (qspErrorNum) return JNI_FALSE;
@@ -567,7 +581,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromFD(JNIEnv
     FILE *f;
     int nativeFd;
     QSP_BOOL res;
-    if (fileDescriptor < 0) return QSP_FALSE;
+    if (qspIsInHostCall || fileDescriptor < 0) return QSP_FALSE;
     nativeFd = dup(fileDescriptor);
     if (nativeFd < 0) return QSP_FALSE;
     if (!(f = fdopen(nativeFd, "rb")))
@@ -585,7 +599,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_saveGameByFD(JNIEnv *env, 
     FILE *f;
     int nativeFd;
     QSP_BOOL res;
-    if (fileDescriptor < 0) return QSP_FALSE;
+    if (qspIsInHostCall || fileDescriptor < 0) return QSP_FALSE;
     nativeFd = dup(fileDescriptor);
     if (nativeFd < 0) return QSP_FALSE;
     if (!(f = fdopen(nativeFd, "wb")))
@@ -606,7 +620,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromFD(JNIEnv
     FILE *f;
     int nativeFd;
     QSP_BOOL res;
-    if (fileDescriptor < 0) return QSP_FALSE;
+    if (qspIsInHostCall || fileDescriptor < 0) return QSP_FALSE;
     nativeFd = dup(fileDescriptor);
     if (nativeFd < 0) return QSP_FALSE;
     if (!(f = fdopen(nativeFd, "rb")))
@@ -629,9 +643,13 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromFD(JNIEnv
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromData(JNIEnv *env, jobject api, jbyteArray data, jboolean isNewGame)
 {
     /* We don't execute any game code here */
-    jint dataSize = (*env)->GetArrayLength(env, data);
-    jbyte *arrayData = (*env)->GetByteArrayElements(env, data, 0);
-    QSP_BOOL res = qspOpenGame(arrayData, dataSize, isNewGame);
+    jint dataSize;
+    jbyte *arrayData;
+    QSP_BOOL res;
+    if (qspIsInHostCall) return JNI_FALSE;
+    dataSize = (*env)->GetArrayLength(env, data);
+    arrayData = (*env)->GetByteArrayElements(env, data, 0);
+    res = qspOpenGame(arrayData, dataSize, isNewGame);
     (*env)->ReleaseByteArrayElements(env, data, arrayData, JNI_ABORT);
     return res;
 }
@@ -641,6 +659,7 @@ JNIEXPORT jbyteArray JNICALL Java_com_libqsp_jni_QSPLib_saveGameAsData(JNIEnv *e
     jbyteArray res;
     void *newBuf, *dataBuf;
     int dataBufSize = 64 * 1024;
+    if (qspIsInHostCall) return 0;
     qspPrepareExecution(QSP_FALSE);
     dataBuf = malloc(dataBufSize);
     if (!dataBuf) return 0;
@@ -680,6 +699,7 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromData(JNIE
     QSP_BOOL res;
     jint dataSize;
     jbyte *arrayData;
+    if (qspIsInHostCall) return JNI_FALSE;
     qspPrepareExecution(QSP_FALSE);
     dataSize = (*env)->GetArrayLength(env, data);
     arrayData = (*env)->GetByteArrayElements(env, data, 0);
@@ -693,11 +713,69 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromData(JNIE
 /* Restart current game */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_restartGame(JNIEnv *env, jobject api, jboolean toRefreshUI)
 {
+    if (qspIsInHostCall) return JNI_FALSE;
     qspPrepareExecution(QSP_FALSE);
     if (!qspRestartGame(QSP_TRUE)) return JNI_FALSE;
     if (qspErrorNum) return JNI_FALSE;
     if (toRefreshUI) qspCallRefreshInt(QSP_FALSE);
     return JNI_TRUE;
+}
+/* ------------------------------------------------------------ */
+/* Host functions */
+
+static jmethodID qspGetHostMethod(JNIEnv *env, jobject target, jstring methodName, const char *sig)
+{
+    jclass clazz;
+    jmethodID res;
+    const char *chars;
+    if (!target || !methodName) return 0;
+    clazz = (*env)->GetObjectClass(env, target);
+    chars = (*env)->GetStringUTFChars(env, methodName, 0);
+    res = (*env)->GetMethodID(env, clazz, chars, sig);
+    (*env)->ReleaseStringUTFChars(env, methodName, chars);
+    (*env)->DeleteLocalRef(env, clazz);
+    /* A missing method gives 0 instead of a pending NoSuchMethodError */
+    if (!res) (*env)->ExceptionClear(env);
+    return res;
+}
+
+static jboolean qspRegisterJavaHostFunc(JNIEnv *env, jstring name, jint minArgs, jint maxArgs, jint resultType,
+    QSP_BOOL isStatement, jobject target, jstring methodName)
+{
+    int index;
+    jmethodID method;
+    QSPString funcName;
+    if (!name) return JNI_FALSE;
+    method = qspGetHostMethod(env, target, methodName, (isStatement ?
+        "([Lcom/libqsp/jni/QSPLib$Variant;)V" : "([Lcom/libqsp/jni/QSPLib$Variant;)Lcom/libqsp/jni/QSPLib$Variant;"));
+    if (!method) return JNI_FALSE;
+    funcName = qspFromJavaString(env, name);
+    index = qspAddHostFunc(funcName, minArgs, maxArgs, resultType, isStatement);
+    qspFreeString(&funcName);
+    return (jboolean)qspAddJavaHostHandler(env, index, target, method);
+}
+/* Register a function of the host: Variant method(Variant[] args), null means the undefined value */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerFunction(JNIEnv *env, jobject api, jstring name, jint minArgs, jint maxArgs, jint resultType, jobject target, jstring methodName)
+{
+    return qspRegisterJavaHostFunc(env, name, minArgs, maxArgs, resultType, QSP_FALSE, target, methodName);
+}
+/* Register a statement of the host: void method(Variant[] args) */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerStatement(JNIEnv *env, jobject api, jstring name, jint minArgs, jint maxArgs, jobject target, jstring methodName)
+{
+    return qspRegisterJavaHostFunc(env, name, minArgs, maxArgs, QSP_TYPE_UNDEF, QSP_TRUE, target, methodName);
+}
+/* Register a profile: a named set of the host functions with a version (major.minor.patch) */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_registerProfile(JNIEnv *env, jobject api, jstring name, jstring version)
+{
+    QSP_BOOL res;
+    QSPString profileName, profileVersion;
+    if (!name || !version) return JNI_FALSE;
+    profileName = qspFromJavaString(env, name);
+    profileVersion = qspFromJavaString(env, version);
+    res = qspAddHostProfile(profileName, profileVersion);
+    qspFreeString(&profileName);
+    qspFreeString(&profileVersion);
+    return (jboolean)res;
 }
 /* ------------------------------------------------------------ */
 /* Initialization of the engine */

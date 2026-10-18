@@ -184,6 +184,10 @@ public abstract class QSPLib {
 
     public native boolean restartGame(boolean toRefreshUI);
 
+    public native boolean registerFunction(String name, int minArgs, int maxArgs, int resultType /* Variant type */, Object target, String methodName);
+    public native boolean registerStatement(String name, int minArgs, int maxArgs, Object target, String methodName);
+    public native boolean registerProfile(String name, String version /* major.minor.patch */);
+
     // Callbacks
     public void onDebug(String str) {}
     public boolean onIsPlayingFile(String file) { return false; }

@@ -13,9 +13,11 @@
 #include "../../actions.h"
 #include "../../common.h"
 #include "../../errors.h"
+#include "../../hostfuncs.h"
 #include "../../locations.h"
 #include "../../objects.h"
 #include "../../text.h"
+#include "../../variant.h"
 
 /* Implemented in qsp-wasm-host.js. Strings are UTF-16 with the size in bytes,
    the answers (input, version) are written to the buffers of the engine. */
@@ -39,6 +41,8 @@ void qspWasmHostSaveGameStatus(const QSP_CHAR *file, int bytes);
 void qspWasmHostInputBox(const QSP_CHAR *text, int bytes, QSP_CHAR *buffer, int maxLen);
 int qspWasmHostShowMenu(const QSPListItem *items, int count);
 void qspWasmHostVersion(const QSP_CHAR *param, int bytes, QSP_CHAR *buffer, int maxLen);
+int qspWasmHostCallFunction(const QSP_CHAR *name, int bytes, QSPVariant *args, int count, QSPVariant *result);
+void qspWasmHostFreeValue(QSPVariant *value);
 
 #define QSP_WASM_STRBYTES(s) ((int)(((s).End - (s).Str) * sizeof(QSP_CHAR)))
 
@@ -244,6 +248,24 @@ QSPString qspCallVersion(QSPString param)
     if (!(qspIsEmpty(res) && qspIsEmpty(param))) return res;
     qspFreeString(&res);
     return qspCopyToNewText(QSP_STATIC_STR(QSP_VER));
+}
+
+QSP_BOOL qspCallHostFunction(int index, QSPVariant *args, int count, QSPVariant *res)
+{
+    QSP_BOOL isOk;
+    QSPVariant value;
+    QSPString name = qspHostFuncs[index].OrigName;
+    if (!res) return (QSP_BOOL)(qspWasmHostCallFunction(name.Str, QSP_WASM_STRBYTES(name), args, count, 0) != 0);
+    qspInitVariant(&value, QSP_TYPE_UNDEF);
+    isOk = (QSP_BOOL)(qspWasmHostCallFunction(name.Str, QSP_WASM_STRBYTES(name), args, count, &value) != 0);
+    if (isOk) qspSetHostResult(res, &value);
+    qspWasmHostFreeValue(&value);
+    return isOk;
+}
+
+void qspReleaseHostFunctions(void)
+{
+    /* The host keeps the handlers */
 }
 
 #endif

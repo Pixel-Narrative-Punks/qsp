@@ -12,6 +12,7 @@
 #include "common.h"
 #include "errors.h"
 #include "game.h"
+#include "hostfuncs.h"
 #include "locations.h"
 #include "memory.h"
 #include "objects.h"
@@ -39,6 +40,8 @@ INLINE QSP_TINYINT qspOperatorOpCode(QSPString *expr);
 INLINE QSPString qspGetString(QSPString *expr);
 INLINE QSPString qspGetCodeBlock(QSPString *expr);
 INLINE QSP_BOOL qspPushOperationToStack(QSP_TINYINT *opStack, QSP_TINYINT *argStack, int *opSp, QSP_TINYINT opCode);
+INLINE QSP_TINYINT qspGetOpMinArgs(QSPMathExpression *expression, QSP_TINYINT opCode, unsigned short valueIndex);
+INLINE QSP_TINYINT qspGetOpMaxArgs(QSPMathExpression *expression, QSP_TINYINT opCode, unsigned short valueIndex);
 INLINE int qspStoreValue(QSPMathExpression *expression, QSPVariant v);
 INLINE QSPMathCompiledOp *qspAppendValueToCompiled(QSPMathExpression *expression, QSP_TINYINT opCode, QSPVariant v);
 INLINE QSPMathCompiledOp *qspAppendOperationToCompiled(QSPMathExpression *expression, QSP_TINYINT opCode, QSP_TINYINT argsCount);
@@ -268,6 +271,11 @@ void qspInitMath(void)
     qspAddOperation(qspOpMsecsCount, 30, 0, QSP_TYPE_NUM, 0, 0);
     qspAddOperation(qspOpQSPVer, 30, 0, QSP_TYPE_STR, 0, 1, QSP_TYPE_STR);
 
+    qspAddOperation(qspOpHostFunc, 30, 0, QSP_TYPE_UNDEF, 0, QSP_MAXMATHOPARGS, QSP_TYPE_UNDEF, QSP_TYPE_TERM);
+    qspAddOperation(qspOpHostFuncExists, 30, qspFunctionHostFunc, QSP_TYPE_BOOL, 1, 1, QSP_TYPE_STR);
+    qspAddOperation(qspOpHostProfile, 30, qspFunctionHostProfile, QSP_TYPE_STR, 1, 1, QSP_TYPE_STR);
+    qspAddOperation(qspOpHostProfileMin, 30, qspFunctionHostProfileMin, QSP_TYPE_BOOL, 2, 2, QSP_TYPE_STR, QSP_TYPE_STR);
+
     /* Names */
     qspAddOpName(qspOpCloseRoundBracket, QSP_RRBRACK, 1, QSP_FALSE);
     qspAddOpName(qspOpCloseSquareBracket, QSP_RSBRACK, 1, QSP_FALSE);
@@ -348,6 +356,10 @@ void qspInitMath(void)
     qspAddOpName(qspOpMsecsCount, QSP_FMT("MSECSCOUNT"), 1, QSP_TRUE);
     qspAddOpName(qspOpQSPVer, QSP_FMT("QSPVER"), 1, QSP_TRUE);
 
+    qspAddOpName(qspOpHostFuncExists, QSP_FUNC_HOSTFUNC, 1, QSP_TRUE);
+    qspAddOpName(qspOpHostProfile, QSP_FUNC_HOSTPROFILE, 1, QSP_TRUE);
+    qspAddOpName(qspOpHostProfileMin, QSP_FUNC_HOSTPROFILEMIN, 1, QSP_TRUE);
+
     for (i = 0; i < QSP_MATHOPSLEVELS; ++i)
         qsort(qspOpsNames[i], qspOpsNamesCounts[i], sizeof(QSPMathOpName), qspMathOpsCompare);
 }
@@ -392,6 +404,22 @@ INLINE QSP_TINYINT qspOperatorOpCode(QSPString *expr)
         }
     }
     return qspOpUnknown;
+}
+
+QSP_BOOL qspIsMathOperatorAt(QSPString s)
+{
+    /* Checks whether the text continues an expression after a value */
+    QSP_TINYINT opCode = qspOperatorOpCode(&s);
+    if (opCode == qspOpUnknown || opCode == qspOpEnd || opCode >= qspOpFirst_Function) return QSP_FALSE;
+    switch (opCode)
+    {
+    case qspOpAnd:
+    case qspOpOr:
+    case qspOpMod:
+        /* Keywords have to be separated */
+        return (!qspIsEmpty(s) && qspIsInClass(*s.Str, QSP_CHAR_DELIM));
+    }
+    return QSP_TRUE;
 }
 
 INLINE QSPString qspGetString(QSPString *expr)
@@ -450,6 +478,27 @@ INLINE QSP_BOOL qspPushOperationToStack(QSP_TINYINT *opStack, QSP_TINYINT *argSt
     opStack[*opSp] = opCode;
     argStack[*opSp] = (opCode < qspOpFirst_Function ? qspOps[opCode].MinArgsCount : 0);
     return QSP_TRUE;
+}
+
+INLINE QSP_TINYINT qspGetOpMinArgs(QSPMathExpression *expression, QSP_TINYINT opCode, unsigned short valueIndex)
+{
+    if (opCode == qspOpHostFunc)
+    {
+        /* A missing function of the host doesn't check its arguments */
+        QSPVariant *func = expression->Values + valueIndex;
+        return (func->Type == QSP_TYPE_NUM ? qspHostFuncs[QSP_PNUM(func)].MinArgsCount : 0);
+    }
+    return qspOps[opCode].MinArgsCount;
+}
+
+INLINE QSP_TINYINT qspGetOpMaxArgs(QSPMathExpression *expression, QSP_TINYINT opCode, unsigned short valueIndex)
+{
+    if (opCode == qspOpHostFunc)
+    {
+        QSPVariant *func = expression->Values + valueIndex;
+        return (func->Type == QSP_TYPE_NUM ? qspHostFuncs[QSP_PNUM(func)].MaxArgsCount : QSP_MAXMATHOPARGS);
+    }
+    return qspOps[opCode].MaxArgsCount;
 }
 
 INLINE int qspStoreValue(QSPMathExpression *expression, QSPVariant v)
@@ -573,7 +622,7 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
     QSPString name;
     QSPMathCompiledOp *compiledOp;
     QSP_TINYINT opCode, opStack[QSP_MATHSTACKSIZE], argStack[QSP_MATHSTACKSIZE];
-    unsigned short nameStack[QSP_MATHSTACKSIZE]; /* var names of the pending qspOpInlineIndexedArrItem operations */
+    unsigned short nameStack[QSP_MATHSTACKSIZE]; /* values of the pending qspOpInlineIndexedArrItem & qspOpHostFunc operations */
     QSP_BOOL waitForOperator = QSP_FALSE;
     int opSp = -1;
     if (!qspPushOperationToStack(opStack, argStack, &opSp, qspOpStart)) return QSP_FALSE;
@@ -601,7 +650,8 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
             if (qspErrorNum) break;
             while (qspOps[opCode].Priority <= qspOps[opStack[opSp]].Priority && qspOps[opStack[opSp]].Priority != 127)
             {
-                if (!qspAppendOperationToCompiled(expression, opStack[opSp], argStack[opSp])) break;
+                if (!(compiledOp = qspAppendOperationToCompiled(expression, opStack[opSp], argStack[opSp]))) break;
+                if (opStack[opSp] == qspOpHostFunc) compiledOp->ValueIndex = nameStack[opSp];
                 --opSp; /* it's always positive */
             }
             if (qspErrorNum) break;
@@ -642,7 +692,8 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
                 if (opCode >= qspOpFirst_Function)
                 {
                     ++argStack[opSp];
-                    if (argStack[opSp] < qspOps[opCode].MinArgsCount || argStack[opSp] > qspOps[opCode].MaxArgsCount)
+                    if (argStack[opSp] < qspGetOpMinArgs(expression, opCode, nameStack[opSp]) ||
+                        argStack[opSp] > qspGetOpMaxArgs(expression, opCode, nameStack[opSp]))
                         qspSetError(QSP_ERR_ARGSCOUNT);
                 }
                 break;
@@ -665,7 +716,7 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
             case qspOpComma:
                 if (opStack[opSp] == qspOpOpenRoundBracket && opStack[opSp - 1] >= qspOpFirst_Function)
                 {
-                    if (++argStack[opSp - 1] > qspOps[opStack[opSp - 1]].MaxArgsCount)
+                    if (++argStack[opSp - 1] > qspGetOpMaxArgs(expression, opStack[opSp - 1], nameStack[opSp - 1]))
                     {
                         qspSetError(QSP_ERR_ARGSCOUNT);
                         break;
@@ -790,7 +841,7 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
                 opCode = opStack[--opSp];
                 if (opCode >= qspOpFirst_Function)
                 {
-                    if (argStack[opSp] < qspOps[opCode].MinArgsCount)
+                    if (argStack[opSp] < qspGetOpMinArgs(expression, opCode, nameStack[opSp]))
                     {
                         qspSetError(QSP_ERR_ARGSCOUNT);
                         break;
@@ -860,21 +911,41 @@ INLINE QSP_BOOL qspAppendExpressionToCompiled(QSPMathExpression *expression, QSP
             }
             else if (!qspIsInClass(*s.Str, QSP_CHAR_DELIM))
             {
+                unsigned short hostFuncValue = 0;
                 name = qspParseName(&s);
                 qspSkipSpaces(&s);
                 opCode = qspFunctionOpCode(name);
+                if (opCode < qspOpFirst_Function)
+                {
+                    QSPString baseName = name;
+                    int hostIndex = qspFindHostFunction(name);
+                    if (!qspIsEmpty(baseName) && qspIsInClass(*baseName.Str, QSP_CHAR_TYPEPREFIX))
+                        baseName.Str += QSP_CHAR_LEN;
+                    if (hostIndex >= 0)
+                    {
+                        opCode = qspOpHostFunc;
+                        hostFuncValue = (unsigned short)qspStoreValue(expression, qspNumVariant(hostIndex));
+                    }
+                    else if (!qspIsEmpty(s) && *s.Str == QSP_LRBRACK_CHAR && qspIsHostFuncName(baseName))
+                    {
+                        opCode = qspOpHostFunc;
+                        hostFuncValue = (unsigned short)qspStoreValue(expression, qspStrVariant(qspCopyToNewText(name), QSP_TYPE_STR));
+                    }
+                }
                 if (opCode >= qspOpFirst_Function)
                 {
                     if (!qspIsEmpty(s) && *s.Str == QSP_LRBRACK_CHAR)
                     {
                         if (!qspPushOperationToStack(opStack, argStack, &opSp, opCode)) break;
+                        nameStack[opSp] = hostFuncValue;
                         if (!qspPushOperationToStack(opStack, argStack, &opSp, qspOpOpenRoundBracket)) break;
                         s.Str += QSP_CHAR_LEN;
                     }
-                    else if (qspOps[opCode].MinArgsCount < 2)
+                    else if (qspGetOpMinArgs(expression, opCode, hostFuncValue) < 2)
                     {
                         if (!qspPushOperationToStack(opStack, argStack, &opSp, opCode)) break;
-                        if (qspOps[opCode].MinArgsCount)
+                        nameStack[opSp] = hostFuncValue;
+                        if (qspGetOpMinArgs(expression, opCode, hostFuncValue))
                         {
                             /* The function has single argument */
                             ++argStack[opSp];
@@ -1060,6 +1131,12 @@ QSPVariant qspCalculateValue(QSPMathExpression *expression, int itemIndex) /* th
     argsCount = item->ArgsCount;
     type = qspOps[opCode].ResType;
     if (QSP_ISDEF(type)) tos.Type = type;
+    if (opCode == qspOpHostFunc && expression->Values[item->ValueIndex].Type == QSP_TYPE_STR)
+    {
+        /* A missing function of the host, its arguments don't get evaluated */
+        qspSetHostFuncNotFoundError(QSP_STR(expression->Values[item->ValueIndex]));
+        return qspGetEmptyVariant(QSP_TYPE_UNDEF);
+    }
     if (argsCount)
     {
         int i, argIndices[QSP_MAXMATHOPARGS];
@@ -1289,6 +1366,9 @@ QSPVariant qspCalculateValue(QSPMathExpression *expression, int itemIndex) /* th
         break;
     case qspOpCurObjs:
         QSP_STR(tos) = qspGetAllObjectsAsCode();
+        break;
+    case qspOpHostFunc:
+        qspExecHostFunction((int)QSP_NUM(expression->Values[item->ValueIndex]), (argsCount ? args : 0), argsCount, &tos);
         break;
     /* External functions -------------------------------------------------------------- */
     default:

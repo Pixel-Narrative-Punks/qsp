@@ -107,6 +107,7 @@
         qspStatSaveGame,
         qspStatOpenQst,
         qspStatSetTimer,
+        qspStatHostCall,
 
         qspStatLast_Statement
     };

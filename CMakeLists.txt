@@ -84,6 +84,7 @@ set(QSP_SOURCES
 	qsp/common.c qsp/common.h
 	qsp/errors.c qsp/errors.h
 	qsp/game.c qsp/game.h
+	qsp/hostfuncs.c qsp/hostfuncs.h
 	qsp/locations.c qsp/locations.h
 	qsp/mathops.c qsp/mathops.h
 	qsp/memory.c qsp/memory.h

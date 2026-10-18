@@ -11,6 +11,7 @@
 #include "codetools.h"
 #include "errors.h"
 #include "game.h"
+#include "hostfuncs.h"
 #include "locations.h"
 #include "mathops.h"
 #include "memory.h"
@@ -65,6 +66,7 @@ void qspInitRuntime(void)
     qspPrepareExecution(QSP_TRUE);
     qspMemClear(QSP_TRUE);
     qspInitCallbacks();
+    qspInitHostFuncs();
     qspInitStats();
     qspInitMath();
 }
@@ -77,12 +79,16 @@ void qspTerminateRuntime(void)
     qspTerminateWorld();
     qspTerminateMath();
     qspTerminateStackAllocator();
+    qspTerminateHostFuncs();
     qspResetError(QSP_FALSE);
 }
 
 void qspPrepareExecution(QSP_BOOL toInit)
 {
     qspResetError(toInit);
+
+    /* The code gets compiled with the current set of the host functions */
+    if (!toInit) qspIsHostRegistryLocked = QSP_TRUE;
 
     if (!qspIsInCallback)
     {
