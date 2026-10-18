@@ -22,6 +22,7 @@
 
     /* External functions */
     void qspSetError(int num);
+    void qspSetErrorWithDetails(int num, QSPString details);
     void qspResetError(QSP_BOOL toInit);
     QSPString qspGetErrorDesc(int errorNum);
 

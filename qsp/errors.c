@@ -11,6 +11,7 @@
 
 int qspErrorNum = 0;
 QSPErrorInfo qspLastError;
+QSP_BOOL qspIsErrorDescOwned = QSP_FALSE;
 
 QSPLocation *qspRealCurLoc = 0;
 int qspRealActIndex = -1;
@@ -47,10 +48,29 @@ void qspSetError(int num)
     }
 }
 
+void qspSetErrorWithDetails(int num, QSPString details)
+{
+    if (!qspErrorNum)
+    {
+        QSPBufString desc;
+        qspSetError(num);
+        /* "Description! (details)" */
+        desc = qspNewBufString(0, 64);
+        qspAddBufText(&desc, qspLastError.ErrorDesc);
+        qspAddBufText(&desc, QSP_STATIC_STR(QSP_FMT(" (")));
+        qspAddBufText(&desc, details);
+        qspAddBufText(&desc, QSP_STATIC_STR(QSP_FMT(")")));
+        qspLastError.ErrorDesc = qspBufStringToString(desc);
+        qspIsErrorDescOwned = QSP_TRUE;
+    }
+}
+
 void qspResetError(QSP_BOOL toInit)
 {
     qspErrorNum = 0;
     qspLastError.ErrorNum = 0;
+    if (qspIsErrorDescOwned && !toInit) qspFreeString(&qspLastError.ErrorDesc);
+    qspIsErrorDescOwned = QSP_FALSE;
     qspLastError.ErrorDesc = qspNullString;
     qspLastError.ActIndex = -1;
     qspLastError.TopLineNum = 0;
@@ -94,6 +114,9 @@ QSPString qspGetErrorDesc(int errorNum)
     case QSP_ERR_INCORRECTREGEXP: str = QSP_STATIC_STR(QSP_FMT("Regular expression error!")); break;
     case QSP_ERR_CODENOTFOUND: str = QSP_STATIC_STR(QSP_FMT("Code not found!")); break;
     case QSP_ERR_LOOPWHILENOTFOUND: str = QSP_STATIC_STR(QSP_FMT("Loop condition not found!")); break;
+    case QSP_ERR_HOSTFUNCFAILED: str = QSP_STATIC_STR(QSP_FMT("External function error!")); break;
+    case QSP_ERR_HOSTFUNCNOTFOUND: str = QSP_STATIC_STR(QSP_FMT("External function not found!")); break;
+    case QSP_ERR_INCORRECTVERSION: str = QSP_STATIC_STR(QSP_FMT("Incorrect version!")); break;
     default: str = QSP_STATIC_STR(QSP_FMT("Unknown error!")); break;
     }
     return str;
