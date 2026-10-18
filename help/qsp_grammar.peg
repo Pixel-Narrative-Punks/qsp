@@ -66,6 +66,7 @@ QSP {
                             | assignmentStatement
                             | userCallStatement
                             | statement
+                            | hostStatement
                             | implicitStatement
 
     statementUnitMultiLine  = ifMultiLine
@@ -153,6 +154,20 @@ QSP {
     userCallStatementNoArgs    = "@@" ws userStatementName
     userCallStatementEmptyArgs = "@@" ws userStatementName ws "(" mws ")"
     userCallStatementWithArgs  = "@@" ws userStatementName ws ( parenthesizedArgument1plusList | nonAmpersandArgument1plusList )
+
+    /* ====================
+       HOST CALLS
+       ====================
+    */
+
+    hostStatement              = hostStatementEmptyArgs | hostStatementWithArgs | hostStatementNoArgs
+    hostStatementNoArgs        = hostName &delimiterChar ~(ws (standardBinaryOperator | "["))
+    hostStatementEmptyArgs     = hostName &delimiterChar ws "(" mws ")" ~(ws (standardBinaryOperator | "["))
+    hostStatementWithArgs      = hostName &delimiterChar ws ( parenthesizedArgument1plusList | nonAmpersandArgument1plusList )
+
+    hostFunctionCall           = hostFunctionCallEmptyArgs | hostFunctionCallWithArgs
+    hostFunctionCallEmptyArgs  = typePrefix? hostName &delimiterChar mws "(" mws ")"
+    hostFunctionCallWithArgs   = typePrefix? hostName &delimiterChar mws parenthesizedArgument1plusList
 
     /* ====================
        FUNCTION CALLS
@@ -255,6 +270,7 @@ QSP {
                                     | codeBlock
                                     | tuple
                                     | userFunctionCall
+                                    | hostFunctionCall
                                     | functionCall
                                     | variableRef
 
@@ -266,6 +282,7 @@ QSP {
                                     | codeBlock
                                     | tuple
                                     | multilineUserFunctionCall
+                                    | hostFunctionCall
                                     | multilineFunctionCall
                                     | multilineVariableRef
 
@@ -277,6 +294,7 @@ QSP {
                                     | codeBlock
                                     | tuple
                                     | userFunctionCall
+                                    | hostFunctionCall
                                     | nonAmpersandFunctionCall /* Functions with a single argument can't contain & */
                                     | variableRef
 
@@ -376,6 +394,9 @@ QSP {
     funcNameWithPrefix    = typePrefix? functionName
     varName               = ~(keyword delimiterChar) ~digit nonDelimiterChar+
     varNameWithPrefix     = typePrefix? varName
+    hostName              = hostNamePart ("." hostNamePart)+ /* see HOST CALLS */
+    hostNamePart          = ~(digit | typePrefix) hostNameChar+
+    hostNameChar          = ~"." nonDelimiterChar
 
     keyword               = functionName
                           | statementName
@@ -538,4 +559,7 @@ QSP {
                             | "rgb"
                             | "msecscount"
                             | "qspver"
+                            | "hostfunc"
+                            | "hostprofmin"
+                            | "hostprof"
 }
