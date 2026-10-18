@@ -456,6 +456,10 @@ static struct
     int MsCount;
     char **MsgWatches; /* variables read while the MSG callback runs */
     int MsgWatchesCount;
+    char **MsgEvents; /* incoming events tried while the MSG callback runs */
+    int MsgEventsCount;
+    char **QueuedEvents; /* incoming events scheduled by the host functions */
+    int QueuedEventsCount;
 
     HostFunc *HostFuncs; /* functions & statements registered by the test */
     int HostFuncsCount;
@@ -648,9 +652,12 @@ static void readVariable(StrBuf *sb, const char *name)
     free(qName);
 }
 
+static int runEvent(const char *spec, QSP_BOOL toRefreshUI, QSP_BOOL *isOk);
+
 static void cbMsg(QSPString str)
 {
     int i;
+    QSP_BOOL isOk;
     eventWithText("msg", str, 0);
     for (i = 0; i < T.MsgWatchesCount; ++i)
     {
@@ -659,6 +666,12 @@ static void cbMsg(QSPString str)
         readVariable(&sb, T.MsgWatches[i]);
         addEvent(sbStr(&sb));
         free(sb.Data);
+    }
+    for (i = 0; i < T.MsgEventsCount; ++i)
+    {
+        /* The callbacks can't run the incoming events */
+        if (runEvent(T.MsgEvents[i], QSP_FALSE, &isOk))
+            addEvent(isOk ? "msg-event 1" : "msg-event 0");
     }
 }
 static void cbView(QSPString file) { eventWithText("view", file, 1); }
@@ -1256,6 +1269,49 @@ static void formatArgs(StrBuf *sb, QSPVariant *args, int count)
     sbAdd(sb, "]");
 }
 
+static int runEvent(const char *spec, QSP_BOOL toRefreshUI, QSP_BOOL *isOk)
+{
+    char loc[MAX_LINE];
+    QSPVariant args[32]; /* more than the engine takes */
+    int i, count = 0, isParsed = 1;
+    QSP_CHAR *qLoc;
+    const char *s = skipSpaces(spec);
+    if (sscanf(s, "%4095s", loc) < 1)
+    {
+        fail("expected 'LOCATION [ARGS]'");
+        return 0;
+    }
+    s = skipSpaces(s + strlen(loc));
+    while (*s)
+    {
+        if (count == (int)(sizeof(args) / sizeof(args[0])) || !parseVariant(&s, args + count))
+        {
+            if (count < (int)(sizeof(args) / sizeof(args[0]))) freeVariant(args + count);
+            isParsed = 0;
+            break;
+        }
+        ++count;
+        s = skipSpaces(s);
+        if (*s == ',')
+            s = skipSpaces(s + 1);
+        else if (*s)
+        {
+            isParsed = 0;
+            break;
+        }
+    }
+    if (isParsed)
+    {
+        qLoc = toQsp(loc);
+        *isOk = QSPExecLocationCodeWithArgs(QSPStringFromC(qLoc), (count ? args : 0), count, toRefreshUI);
+        free(qLoc);
+    }
+    else
+        fail("incorrect arguments of the event '%s'", spec);
+    for (i = 0; i < count; ++i) freeVariant(args + i);
+    return isParsed;
+}
+
 static void setResult(QSPVariant *result, QSPVariant *value)
 {
     switch (value->Type)
@@ -1373,6 +1429,19 @@ static QSP_BOOL callHost(int funcIndex, QSPVariant *args, int count, QSPVariant 
             sbAddf(&sb, "read %s => ", value);
             readVariable(&sb, value);
             addEvent(sbStr(&sb));
+        }
+        else if ((value = command(reply, "event")))
+        {
+            /* The incoming events are refused inside the call */
+            QSP_BOOL isEventOk;
+            if (runEvent(value, QSP_FALSE, &isEventOk))
+                addEvent(isEventOk ? "host-event 1" : "host-event 0");
+        }
+        else if ((value = command(reply, "queue")))
+        {
+            /* The event runs later, @run-queued */
+            T.QueuedEvents = xrealloc(T.QueuedEvents, (T.QueuedEventsCount + 1) * sizeof(char *));
+            T.QueuedEvents[T.QueuedEventsCount++] = xstrdup(value);
         }
         else if (!command(reply, "ok"))
             fail("unknown reply '%s'", reply);
@@ -1531,6 +1600,8 @@ static void resetEngine(void)
     freeStrings(&T.InputReplies, &T.InputRepliesCount);
     freeStrings(&T.VersionReplies, &T.VersionRepliesCount);
     freeStrings(&T.MsgWatches, &T.MsgWatchesCount);
+    freeStrings(&T.MsgEvents, &T.MsgEventsCount);
+    freeStrings(&T.QueuedEvents, &T.QueuedEventsCount);
     freeHostFuncs();
     for (i = 0; i < T.DbCount; ++i) free(T.DbValues[i]);
     free(T.DbValues);
@@ -1883,6 +1954,43 @@ static void runCommand(const char *line, char **block, int blockCount)
         registerHostFunc("qsp.db.set 2 2", 1);
         registerHostFunc("qsp.db.del 1 1", 1);
         registerHostProfile("qsp.db 1.0.0");
+    }
+    else if ((arg = command(line, "@run-args")) || (arg = command(line, "@run-queued")))
+    {
+        /* Incoming events: a failure without an error of the engine is a refusal */
+        QSP_BOOL isOk;
+        char **events;
+        int j, count = 0;
+        if (command(line, "@run-queued"))
+        {
+            /* Stops at the first error, the rest is dropped */
+            events = T.QueuedEvents;
+            count = T.QueuedEventsCount;
+            T.QueuedEvents = 0;
+            T.QueuedEventsCount = 0;
+        }
+        else
+        {
+            events = xmalloc(sizeof(char *));
+            events[count++] = xstrdup(arg);
+        }
+        checkNoPendingError();
+        for (j = 0; j < count && !T.IsFailed && !T.PendingError; ++j)
+        {
+            ensureGameLoaded();
+            execSilently(""); /* resets the last error */
+            if (!runEvent(events[j], QSP_TRUE, &isOk)) break;
+            if (!isOk && !QSPGetLastErrorData().ErrorNum)
+                addEvent("event_refused");
+            else
+                afterCall(isOk);
+        }
+        freeStrings(&events, &count);
+    }
+    else if ((arg = command(line, "@msg-event")))
+    {
+        T.MsgEvents = xrealloc(T.MsgEvents, (T.MsgEventsCount + 1) * sizeof(char *));
+        T.MsgEvents[T.MsgEventsCount++] = xstrdup(arg);
     }
     else if ((arg = command(line, "@reinit")))
     {

@@ -107,6 +107,19 @@ the undefined result. The replies:
 | `ok` | the call succeeds with the undefined result |
 | `exec CODE` | tries `QSPExecString` from inside the call, records `host-exec 0/1` (the engine refuses it) |
 | `read VAR` | reads a variable from inside the call, records `read VAR => VALUE` |
+| `event LOC [ARGS]` | tries `QSPExecLocationCodeWithArgs` from inside the call, records `host-event 0/1` (the engine refuses it) |
+| `queue LOC [ARGS]` | schedules the event, `@run-queued` runs it after the call |
+
+### Incoming events
+
+| Command | Meaning |
+|---|---|
+| `@run-args LOC [ARGS]` | `QSPExecLocationCodeWithArgs`, `ARGS` are QSP literals separated with `,` |
+| `@run-queued` | runs the events scheduled with the `queue` replies in order, stops at the first error |
+| `@msg-event LOC [ARGS]` | every `MSG` callback tries the event and records `msg-event 0/1` |
+
+A call refused without an error of the engine (inside a callback, more than
+20 arguments) is recorded as the event `event_refused`.
 
 `@expect error-desc TEXT` checks the description of the last error
 (`QSPGetLastErrorData`), e.g. `External function not found! (T.F)`.

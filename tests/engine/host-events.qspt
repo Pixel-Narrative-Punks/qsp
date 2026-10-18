@@ -1,0 +1,289 @@
+// Incoming events of the host: QSPExecLocationCodeWithArgs (stage 2 of the host functions)
+// "@run-args LOC ARGS" runs location LOC with the literals as ARGS, "event_refused" means
+// the call failed without an error of the engine.
+
+// ------------------------------------------------------------
+// ARGS
+
+@test values & types of ARGS
+@game
+# ev
+n = arrsize('args')
+a0 = args[0]
+$a1 = $args[1]
+t = %args[2]
+isundef = (arrtype('args', 3) = '')
+--
+@run-args ev 1, 'a', [2, 'b'], ?
+@expect n => 4
+@expect a0 => 1
+@expect $a1 => 'a'
+@expect t => [2, 'b']
+@expect isundef => 1
+
+@test location without arguments
+@game
+# ev
+n = arrsize('args')
+--
+@run-args ev
+@expect n => 0
+
+@test strings & tuples keep their values
+@game
+# ev
+$s = $args[0] + $args[1]
+t = %args[2]
+--
+@run-args ev 'it''s', '', ['', [1, ['x']]]
+@expect $s => 'it''s'
+@expect t => ['', [1, ['x']]]
+
+@test ARGS of the event are local
+@game
+# ev
+args[0] = 100
+inner = args[0]
+--
+@exec args[0] = 7
+@run-args ev 1
+@expect inner => 100
+@expect args[0] => 7
+
+@test up to 20 arguments
+@game
+# ev
+n = arrsize('args')
+last = args[19]
+--
+@run-args ev 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+@expect n => 20
+@expect last => 20
+
+@test more than 20 arguments are refused
+@game
+# ev
+ran = 1
+--
+@run-args ev 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21
+@expect event event_refused
+@expect ran => ?
+
+@test result of the location is ignored
+@game
+# ev
+result = args[0] * 2
+done = 1
+--
+@run-args ev 4
+@expect done => 1
+
+// ------------------------------------------------------------
+// Execution
+
+@test missing location
+@src
+x = 1
+@run-args nowhere 1
+@expect error LOCNOTFOUND
+
+@test error inside the event
+@game
+# ev
+x = 1
+y = 1 / args[0]
+z = 1
+--
+@run-args ev 0
+@expect error DIVBYZERO (location 'ev', line 2, local 2, action -1) Y = 1 / ARGS[0]
+@expect x => 1
+@expect z => ?
+
+@test event changes the current location
+@game
+# start
+*pl 'start'
+--
+# ev
+gt 'room', args[0]
+--
+# room
+$name = $args[0]
+*pl 'room ' + $args[0]
+--
+@run start
+@run-args ev 'hall'
+@expect curloc room
+@expect $name => 'hall'
+@expect main room hall\r\n
+
+@test event refreshes the interface
+@game
+# ev
+*pl $args[0]
+--
+@run-args ev 'text'
+@expect event main_changed text\r\n
+
+@test event without a game
+@run-args ev 1
+@expect error LOCNOTFOUND
+
+@test events can call host functions
+@host-func t.f 1 1
+@host-reply t.f => 10
+@game
+# ev
+x = t.f(args[0])
+--
+@run-args ev 5
+@expect event host t.f [5]
+@expect x => 10
+
+// ------------------------------------------------------------
+// Scheduling from the host
+
+@test event scheduled by a host function runs later
+@host-func t.later 0 0
+@host-reply t.later queue ev 5, 'x'
+@game
+# start
+--
+# test
+t.later() & before = got
+--
+# ev
+got = args[0]
+$what = $args[1]
+--
+@run
+@expect event host t.later []
+@expect before => ?
+@expect got => ?
+@run-queued
+@expect got => 5
+@expect $what => 'x'
+
+@test events scheduled by a host statement run in order
+@host-stat t.notify 1 1
+@host-reply t.notify queue ev 1
+@host-reply t.notify queue ev 2
+@game
+# start
+--
+# test
+t.notify 'a' & t.notify 'b'
+--
+# ev
+$log += $str(args[0])
+--
+@run
+@expect $log => ''
+@run-queued
+@expect $log => '12'
+
+@test scheduled events stop at the first error
+@host-stat t.notify 0 0
+@host-reply t.notify queue ev 0
+@host-reply t.notify queue ev 1
+@game
+# start
+--
+# test
+t.notify & t.notify
+--
+# ev
+x = 1 / args[0]
+--
+@run
+@run-queued
+@expect error DIVBYZERO
+@expect x => ?
+
+// ------------------------------------------------------------
+// Refusals inside the callbacks
+
+@test host function can't run an event
+@host-func t.f 0 0
+@host-reply t.f event ev 1
+@game
+# start
+--
+# test
+x = t.f() & z = 1
+--
+# ev
+ran = 1
+--
+@run
+@expect event host-event 0
+@expect ran => ?
+@expect z => 1
+
+@test host statement can't run an event
+@host-stat t.s 0 0
+@host-reply t.s event ev 1
+@game
+# start
+--
+# test
+t.s & z = 1
+--
+# ev
+ran = 1
+--
+@run
+@expect event host-event 0
+@expect ran => ?
+@expect z => 1
+
+@test message callback can't run an event
+@msg-event ev 1
+@game
+# start
+--
+# test
+msg 'hi' & z = 1
+--
+# ev
+ran = 1
+--
+@run
+@expect event msg hi
+@expect event msg-event 0
+@expect ran => ?
+@expect z => 1
+
+@test refusal doesn't break the next event
+@host-func t.f 0 0
+@host-reply t.f event ev 1
+@game
+# start
+--
+# test
+x = t.f()
+--
+# ev
+ran = args[0]
+--
+@run
+@expect event host-event 0
+@run-args ev 2
+@expect ran => 2
+
+// ------------------------------------------------------------
+// The state without events
+
+@test event that changes nothing leaves no trace in the save
+@game
+# start
+x = 1
+--
+# ev
+local y = args[0]
+--
+@run start
+@save before
+@run-args ev 1, 'a', [2]
+@save after
+@expect same-saves before after
