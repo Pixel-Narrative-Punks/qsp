@@ -101,14 +101,38 @@ void qspCallSystem(QSPString cmd)
     }
 }
 
-void qspCallOpenGame(QSPString file, QSP_BOOL isNewGame)
+void qspCallOpenGame(QSPString file)
 {
     /* Open game file */
     if (qspCallbacks[QSP_CALL_OPENGAME])
     {
         QSPCallState state;
         qspPrepareCallback(&state, QSP_FALSE);
-        qspCallbacks[QSP_CALL_OPENGAME](file, isNewGame);
+        qspCallbacks[QSP_CALL_OPENGAME](file);
+        qspFinalizeCallback(&state, QSP_FALSE);
+    }
+}
+
+void qspCallIncludeGame(QSPString file)
+{
+    /* Include game file */
+    if (qspCallbacks[QSP_CALL_INCLUDEGAME])
+    {
+        QSPCallState state;
+        qspPrepareCallback(&state, QSP_FALSE);
+        qspCallbacks[QSP_CALL_INCLUDEGAME](file);
+        qspFinalizeCallback(&state, QSP_FALSE);
+    }
+}
+
+void qspCallRemoveGame(QSPString file)
+{
+    /* Remove included game file */
+    if (qspCallbacks[QSP_CALL_REMOVEGAME])
+    {
+        QSPCallState state;
+        qspPrepareCallback(&state, QSP_FALSE);
+        qspCallbacks[QSP_CALL_REMOVEGAME](file);
         qspFinalizeCallback(&state, QSP_FALSE);
     }
 }

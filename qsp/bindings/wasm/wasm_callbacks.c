@@ -32,7 +32,9 @@ void qspWasmHostCloseFile(const QSP_CHAR *file, int bytes);
 void qspWasmHostSystem(const QSP_CHAR *cmd, int bytes);
 void qspWasmHostSleep(int msecs);
 int qspWasmHostGetMSCount(void);
-void qspWasmHostOpenGame(const QSP_CHAR *file, int bytes, int isNewGame);
+void qspWasmHostOpenGame(const QSP_CHAR *file, int bytes);
+void qspWasmHostIncludeGame(const QSP_CHAR *file, int bytes);
+void qspWasmHostRemoveGame(const QSP_CHAR *file, int bytes);
 void qspWasmHostInitGame(int isNewGame);
 void qspWasmHostOpenGameStatus(const QSP_CHAR *file, int bytes);
 void qspWasmHostSaveGameStatus(const QSP_CHAR *file, int bytes);
@@ -101,11 +103,27 @@ void qspCallSystem(QSPString cmd)
     qspFinalizeCallback(&state, QSP_FALSE);
 }
 
-void qspCallOpenGame(QSPString file, QSP_BOOL isNewGame)
+void qspCallOpenGame(QSPString file)
 {
     QSPCallState state;
     qspPrepareCallback(&state, QSP_FALSE);
-    qspWasmHostOpenGame(file.Str, QSP_WASM_STRBYTES(file), isNewGame);
+    qspWasmHostOpenGame(file.Str, QSP_WASM_STRBYTES(file));
+    qspFinalizeCallback(&state, QSP_FALSE);
+}
+
+void qspCallIncludeGame(QSPString file)
+{
+    QSPCallState state;
+    qspPrepareCallback(&state, QSP_FALSE);
+    qspWasmHostIncludeGame(file.Str, QSP_WASM_STRBYTES(file));
+    qspFinalizeCallback(&state, QSP_FALSE);
+}
+
+void qspCallRemoveGame(QSPString file)
+{
+    QSPCallState state;
+    qspPrepareCallback(&state, QSP_FALSE);
+    qspWasmHostRemoveGame(file.Str, QSP_WASM_STRBYTES(file));
     qspFinalizeCallback(&state, QSP_FALSE);
 }
 

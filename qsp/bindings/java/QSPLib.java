@@ -183,8 +183,11 @@ public abstract class QSPLib {
     public native ErrorInfo getLastErrorData();
     public native String getErrorDesc(int errorNum);
 
-    public native boolean loadGameWorldFromData(byte[] data, boolean isNewGame);
-    public native boolean loadGameWorldFromFD(int fileDescriptor, boolean isNewGame);
+    public native boolean loadGameWorldFromData(byte[] data);
+    public native boolean loadGameWorldFromFD(int fileDescriptor);
+
+    public native boolean includeGameWorldFromData(String file, byte[] data);
+    public native boolean includeGameWorldFromFD(String file, int fileDescriptor);
 
     public native byte[] saveGameAsData(boolean toRefreshUI);
     public native boolean saveGameByFD(int fileDescriptor, boolean toRefreshUI);
@@ -207,7 +210,9 @@ public abstract class QSPLib {
     public void onSetTimer(int msecs) {}
     public void onSetInputStrText(String text) {}
     public void onSystem(String cmd) {}
-    public void onOpenGame(String file, boolean isNewGame) {}
+    public void onOpenGame(String file) {}
+    public void onIncludeGame(String file) {}
+    public void onRemoveGame(String file) {}
     public void onInitGame(boolean isNewGame) {}
     public void onOpenGameStatus(String file) {}
     public void onSaveGameStatus(String file) {}

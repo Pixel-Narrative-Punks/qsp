@@ -31,8 +31,12 @@ const hostCalls = {
   qspWasmHostSystem: (cmd, bytes) => qspHostCall('onSystem', () => [UTF16ToString(cmd, bytes)]),
   qspWasmHostSleep: (msecs) => qspHostCall('onSleep', () => [msecs]),
   qspWasmHostGetMSCount: () => qspHostCall('onGetMSCount', () => [], (res) => res | 0),
-  qspWasmHostOpenGame: (file, bytes, isNewGame) =>
-    qspHostCall('onOpenGame', () => [UTF16ToString(file, bytes), !!isNewGame]),
+  qspWasmHostOpenGame: (file, bytes) =>
+    qspHostCall('onOpenGame', () => [UTF16ToString(file, bytes)]),
+  qspWasmHostIncludeGame: (file, bytes) =>
+    qspHostCall('onIncludeGame', () => [UTF16ToString(file, bytes)]),
+  qspWasmHostRemoveGame: (file, bytes) =>
+    qspHostCall('onRemoveGame', () => [UTF16ToString(file, bytes)]),
   qspWasmHostInitGame: (isNewGame) => qspHostCall('onInitGame', () => [!!isNewGame]),
   qspWasmHostOpenGameStatus: (file, bytes) =>
     qspHostCall('onOpenGameStatus', () => [UTF16ToString(file, bytes)]),

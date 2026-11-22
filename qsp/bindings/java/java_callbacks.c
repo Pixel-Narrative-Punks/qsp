@@ -131,7 +131,7 @@ void qspCallSystem(QSPString cmd)
     }
 }
 
-void qspCallOpenGame(QSPString file, QSP_BOOL isNewGame)
+void qspCallOpenGame(QSPString file)
 {
     /* Open game file */
     if (qspCallbacks[QSP_CALL_OPENGAME])
@@ -142,7 +142,43 @@ void qspCallOpenGame(QSPString file, QSP_BOOL isNewGame)
 
         qspPrepareCallback(&state, QSP_FALSE);
 
-        (*javaEnv)->CallVoidMethod(javaEnv, qspApiObject, qspCallbacks[QSP_CALL_OPENGAME], jniFile, isNewGame);
+        (*javaEnv)->CallVoidMethod(javaEnv, qspApiObject, qspCallbacks[QSP_CALL_OPENGAME], jniFile);
+        (*javaEnv)->DeleteLocalRef(javaEnv, jniFile);
+
+        qspFinalizeCallback(&state, QSP_FALSE);
+    }
+}
+
+void qspCallIncludeGame(QSPString file)
+{
+    /* Include game file */
+    if (qspCallbacks[QSP_CALL_INCLUDEGAME])
+    {
+        QSPCallState state;
+        JNIEnv *javaEnv = qspGetJniEnv();
+        jstring jniFile = qspToJavaString(javaEnv, file);
+
+        qspPrepareCallback(&state, QSP_FALSE);
+
+        (*javaEnv)->CallVoidMethod(javaEnv, qspApiObject, qspCallbacks[QSP_CALL_INCLUDEGAME], jniFile);
+        (*javaEnv)->DeleteLocalRef(javaEnv, jniFile);
+
+        qspFinalizeCallback(&state, QSP_FALSE);
+    }
+}
+
+void qspCallRemoveGame(QSPString file)
+{
+    /* Remove included game file */
+    if (qspCallbacks[QSP_CALL_REMOVEGAME])
+    {
+        QSPCallState state;
+        JNIEnv *javaEnv = qspGetJniEnv();
+        jstring jniFile = qspToJavaString(javaEnv, file);
+
+        qspPrepareCallback(&state, QSP_FALSE);
+
+        (*javaEnv)->CallVoidMethod(javaEnv, qspApiObject, qspCallbacks[QSP_CALL_REMOVEGAME], jniFile);
         (*javaEnv)->DeleteLocalRef(javaEnv, jniFile);
 
         qspFinalizeCallback(&state, QSP_FALSE);

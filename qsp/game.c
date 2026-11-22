@@ -26,7 +26,6 @@ int qspQstCRC = 0;
 
 QSPString qspCurIncFiles[QSP_MAXINCFILES];
 int qspCurIncFilesCount = 0;
-int qspCurIncLocsCount = 0;
 
 static const unsigned int qspCRCTable[256] =
 {
@@ -66,9 +65,12 @@ static const unsigned int qspCRCTable[256] =
 
 INLINE int qspCRC(void *, int);
 INLINE int qspSearchIncFile(QSPString file);
-INLINE void qspIncludeGameFile(QSPString s);
-INLINE void qspRestoreCurrentIncludes(void);
+INLINE void qspIncludeGameFile(QSPString file);
+INLINE void qspRestoreCurrentIncFiles(void);
+INLINE void qspRemoveIncFile(QSPString file);
 INLINE QSP_BOOL qspCheckGame(QSPString *strs, int count, QSP_BOOL isUCS);
+INLINE int qspPrepareGameData(void *data, int dataSize, QSPString **strs, QSP_BOOL *isUCS);
+INLINE void qspLoadGameData(QSPString *strs, QSP_BOOL isUCS);
 INLINE QSP_BOOL qspSkipLines(int totalLinesCount, int linesToSkip, int *index);
 INLINE QSP_BOOL qspGetIntValueAndSkipLine(QSPString *strs, int totalLinesCount, int *index, QSP_BOOL isUCS, int *value);
 INLINE QSP_BOOL qspCheckVarNameAndSkipLine(QSPString *strs, int totalLinesCount, int *index, QSP_BOOL isUCS);
@@ -91,11 +93,9 @@ void qspClearAllIncludes(QSP_BOOL toInit)
         int i;
         for (i = 0; i < qspCurIncFilesCount; ++i)
             qspFreeString(qspCurIncFiles + i);
-        if (qspCurIncLocsCount)
-            qspTruncateWorld(qspLocsCount - qspCurIncLocsCount);
+        qspTruncateWorld(qspMainLocsCount);
     }
     qspCurIncFilesCount = 0;
-    qspCurIncLocsCount = 0;
 }
 
 INLINE int qspSearchIncFile(QSPString file)
@@ -109,46 +109,65 @@ INLINE int qspSearchIncFile(QSPString file)
     return -1;
 }
 
-INLINE void qspIncludeGameFile(QSPString s)
+INLINE void qspIncludeGameFile(QSPString file)
 {
-    int oldLocationState;
-    if (!qspIsAnyString(s)) return;
-    if (qspSearchIncFile(s) >= 0) return;
+    if (!qspMainLocsCount)
+    {
+        qspSetError(QSP_ERR_GAMENOTLOADED);
+        return;
+    }
+    if (!qspIsAnyString(file)) return;
+    if (qspSearchIncFile(file) >= 0) return;
     if (qspCurIncFilesCount == QSP_MAXINCFILES)
     {
         qspSetError(QSP_ERR_CANTINCFILE);
         return;
     }
-    oldLocationState = qspLocationState;
-    qspCallOpenGame(s, QSP_FALSE);
-    if (qspLocationState != oldLocationState) return;
-    /* The host could include new files */
-    if (qspSearchIncFile(s) >= 0) return;
-    if (qspCurIncFilesCount == QSP_MAXINCFILES)
-    {
-        qspSetError(QSP_ERR_CANTINCFILE);
-        return;
-    }
-    qspCurIncFiles[qspCurIncFilesCount++] = qspCopyToNewText(s);
+    qspCurIncFiles[qspCurIncFilesCount++] = qspCopyToNewText(file);
+    qspCallIncludeGame(file);
 }
 
-INLINE void qspRestoreCurrentIncludes(void)
+INLINE void qspRestoreCurrentIncFiles(void)
 {
     QSPString *files;
-    int i, count = qspCurIncFilesCount, oldLocationState = qspLocationState;
+    int i, count, oldLocationState = qspLocationState;
+    qspCallRemoveGame(qspNullString);
+    if (qspLocationState != oldLocationState) return;
     /* Copy files, the host can change the includes */
+    count = qspCurIncFilesCount;
     qspCopyStrs(&files, qspCurIncFiles, 0, count);
     for (i = 0; i < count; ++i)
     {
-        qspCallOpenGame(files[i], QSP_FALSE);
-        if (qspLocationState != oldLocationState) break;
+        if (qspIsAnyString(files[i]))
+        {
+            qspCallIncludeGame(files[i]);
+            if (qspLocationState != oldLocationState) break;
+        }
     }
     qspFreeStrs(files, count);
 }
 
+INLINE void qspRemoveIncFile(QSPString file)
+{
+    int fileIndex = qspSearchIncFile(file);
+    if (fileIndex >= 0)
+    {
+        int i;
+        qspRemoveIncFileLocations(fileIndex);
+        qspFreeString(qspCurIncFiles + fileIndex);
+        --qspCurIncFilesCount;
+        memmove(qspCurIncFiles + fileIndex, qspCurIncFiles + fileIndex + 1, (qspCurIncFilesCount - fileIndex) * sizeof(QSPString));
+        for (i = qspMainLocsCount; i < qspLocsCount; ++i)
+        {
+            if (qspLocs[i]->FileIndex > fileIndex)
+                --qspLocs[i]->FileIndex;
+        }
+    }
+}
+
 QSP_BOOL qspRestartGame(QSP_BOOL toReset)
 {
-    if (!qspLocsCount)
+    if (!qspMainLocsCount)
     {
         qspSetError(QSP_ERR_GAMENOTLOADED);
         return QSP_FALSE;
@@ -160,6 +179,8 @@ QSP_BOOL qspRestartGame(QSP_BOOL toReset)
         qspCurWindowsDisplayState = QSP_WIN_MAIN | QSP_WIN_VARS | QSP_WIN_ACTS | QSP_WIN_OBJS | QSP_WIN_INPUT;
         qspMemClear(QSP_FALSE);
         /* Execute callbacks to update the current state */
+        qspCallRemoveGame(qspNullString);
+        if (qspLocationState != oldLocationState) return QSP_FALSE;
         qspResetTime(0);
         if (qspLocationState != oldLocationState) return QSP_FALSE;
         qspCallSetTimer(QSP_DEFTIMERINTERVAL);
@@ -177,6 +198,11 @@ QSP_BOOL qspRestartGame(QSP_BOOL toReset)
         /* Extra initialization of the game state */
         qspCallInitGame(QSP_TRUE);
         if (qspLocationState != oldLocationState) return QSP_FALSE;
+    }
+    if (!qspMainLocsCount) /* callbacks can reset the world */
+    {
+        qspSetError(QSP_ERR_GAMENOTLOADED);
+        return QSP_FALSE;
     }
     qspNavigateToLocation(qspLocs[0], QSP_TRUE, 0, 0);
     return QSP_TRUE;
@@ -208,33 +234,32 @@ INLINE QSP_BOOL qspCheckGame(QSPString *strs, int count, QSP_BOOL isUCS)
     return QSP_TRUE;
 }
 
-QSP_BOOL qspOpenGame(void *data, int dataSize, QSP_BOOL isNewGame)
+INLINE int qspPrepareGameData(void *data, int dataSize, QSPString **strs, QSP_BOOL *isUCS)
 {
-    QSP_BOOL isLatestFormat, isUCS;
-    int i, j, ind, crc, count, locsCount, actsCount, oldLocsCount;
-    QSPLocation *curLoc;
-    QSPLocAct *curAct;
-    QSPString str, gameString, *strs;
-    crc = (isNewGame ? qspCRC(data, dataSize) : 0);
-    isUCS = (dataSize >= 2 && *((unsigned char *)data + 1) == 0);
-    gameString = qspStringFromFileData(data, dataSize, isUCS);
-    count = qspSplitStr(gameString, QSP_STATIC_STR(QSP_STRSDELIM), &strs);
+    int count;
+    QSPString gameString;
+    *isUCS = (dataSize >= 2 && *((unsigned char *)data + 1) == 0);
+    gameString = qspStringFromFileData(data, dataSize, *isUCS);
+    count = qspSplitStr(gameString, QSP_STATIC_STR(QSP_STRSDELIM), strs);
     qspFreeString(&gameString);
-    if (!qspCheckGame(strs, count, isUCS))
+    if (!qspCheckGame(*strs, count, *isUCS))
     {
         qspSetError(QSP_ERR_CANTLOADFILE);
-        qspFreeStrs(strs, count);
-        return QSP_FALSE;
+        qspFreeStrs(*strs, count);
+        return -1;
     }
+    return count;
+}
+
+INLINE void qspLoadGameData(QSPString *strs, QSP_BOOL isUCS)
+{
+    QSP_BOOL isLatestFormat;
+    QSPLocation *curLoc;
+    QSPLocAct *curAct;
+    QSPString str;
+    int i, j, ind, locsCount, actsCount;
     isLatestFormat = qspStrsEqual(strs[0], QSP_STATIC_STR(QSP_GAMEID));
     locsCount = (isLatestFormat ? qspReadEncodedIntVal(strs[3], isUCS) : qspStrToNum(strs[0], 0));
-    if (isNewGame)
-    {
-        qspClearAllIncludes(QSP_FALSE);
-        qspTruncateWorld(0); /* clear the world */
-        qspAdvanceNamesGeneration(); /* names are used by preprocessed code */
-    }
-    oldLocsCount = qspLocsCount;
     ind = (isLatestFormat ? 4 : 30);
     for (i = 0; i < locsCount; ++i)
     {
@@ -270,11 +295,62 @@ QSP_BOOL qspOpenGame(void *data, int dataSize, QSP_BOOL isNewGame)
         else
             ind += actsCount * (isLatestFormat ? 3 : 2);
     }
+}
+
+QSP_BOOL qspOpenGame(void *data, int dataSize)
+{
+    QSP_BOOL isUCS;
+    QSPString *strs;
+    int count = qspPrepareGameData(data, dataSize, &strs, &isUCS);
+    if (count < 0) return QSP_FALSE;
+    qspClearAllIncludes(QSP_FALSE);
+    qspTruncateWorld(0); /* clear the world */
+    qspAdvanceNamesGeneration(); /* names are used by the preprocessed code */
+    qspLoadGameData(strs, isUCS);
     qspFreeStrs(strs, count);
-    if (isNewGame)
-        qspQstCRC = crc;
-    else
-        qspCurIncLocsCount += qspLocsCount - oldLocsCount;
+    qspMainLocsCount = qspLocsCount;
+    qspQstCRC = qspCRC(data, dataSize);
+    return QSP_TRUE;
+}
+
+QSP_BOOL qspIncludeGame(QSPString file, void *data, int dataSize)
+{
+    QSP_BOOL isUCS;
+    QSPString *strs;
+    int count, fileIndex, oldLocsCount;
+    if (!qspMainLocsCount)
+    {
+        qspSetError(QSP_ERR_GAMENOTLOADED);
+        return QSP_FALSE;
+    }
+    if (!qspIsAnyString(file))
+    {
+        qspSetError(QSP_ERR_CANTINCFILE);
+        return QSP_FALSE;
+    }
+    fileIndex = qspSearchIncFile(file);
+    if (fileIndex < 0 && qspCurIncFilesCount == QSP_MAXINCFILES)
+    {
+        qspSetError(QSP_ERR_CANTINCFILE);
+        return QSP_FALSE;
+    }
+    count = qspPrepareGameData(data, dataSize, &strs, &isUCS);
+    if (count < 0) return QSP_FALSE;
+    oldLocsCount = qspLocsCount;
+    qspLoadGameData(strs, isUCS);
+    qspFreeStrs(strs, count);
+    if (qspLocsCount > oldLocsCount)
+    {
+        int i;
+        if (fileIndex < 0)
+        {
+            fileIndex = qspCurIncFilesCount++;
+            qspCurIncFiles[fileIndex] = qspCopyToNewText(file);
+        }
+        /* Added locations are always at the end */
+        for (i = oldLocsCount; i < qspLocsCount; ++i)
+            qspLocs[i]->FileIndex = fileIndex;
+    }
     return QSP_TRUE;
 }
 
@@ -289,6 +365,12 @@ QSP_BOOL qspSaveGameStatus(void *buf, int *bufSize, QSP_BOOL isUCS)
     QSPVarData *varData;
     QSP_BIGINT msecsCount;
     int i, j, varsCount, dataSize, oldLocationState = qspLocationState;
+    if (!qspMainLocsCount)
+    {
+        qspSetError(QSP_ERR_GAMENOTLOADED);
+        *bufSize = 0;
+        return QSP_FALSE;
+    }
     /* Call ONGSAVE without local variables */
     qspExecLocByVarNameWithArgs(QSP_STATIC_STR(QSP_LOC_GAMETOBESAVED), 0, 0);
     if (qspLocationState != oldLocationState)
@@ -465,15 +547,15 @@ INLINE QSP_BOOL qspCheckGameStatus(QSPString *strs, int strsCount, QSP_BOOL isUC
     /* qspTimerInterval */
     if (!qspGetIntValueAndSkipLine(strs, strsCount, &ind, isUCS, &temp)) return QSP_FALSE;
     if (temp < 0) return QSP_FALSE;
-    /* qspPLFilesCount */
+    /* playlist files count */
     if (!qspGetIntValueAndSkipLine(strs, strsCount, &ind, isUCS, &count)) return QSP_FALSE;
     if (count < 0 || count > QSP_MAXPLFILES) return QSP_FALSE;
-    /* files: name + volume */
+    /* playlist files: name + volume */
     if (!qspSkipLines(strsCount, 2 * count, &ind)) return QSP_FALSE;
-    /* qspCurIncFilesCount */
+    /* included files count */
     if (!qspGetIntValueAndSkipLine(strs, strsCount, &ind, isUCS, &count)) return QSP_FALSE;
     if (count < 0 || count > QSP_MAXINCFILES) return QSP_FALSE;
-    /* includes */
+    /* included files */
     if (!qspSkipLines(strsCount, count, &ind)) return QSP_FALSE;
     /* qspCurActsCount */
     if (!qspGetIntValueAndSkipLine(strs, strsCount, &ind, isUCS, &count)) return QSP_FALSE;
@@ -573,6 +655,11 @@ QSP_BOOL qspOpenGameStatus(void *data, int dataSize)
     QSP_BIGINT msecsCount;
     int i, j, ind, count, varsCount, valsCount, index, actsCount, oldLocationState;
     QSP_BOOL isTopLevel, isUCS = (dataSize >= 2 && *((unsigned char *)data + 1) == 0);
+    if (!qspMainLocsCount)
+    {
+        qspSetError(QSP_ERR_GAMENOTLOADED);
+        return QSP_FALSE;
+    }
     gameString = qspStringFromFileData(data, dataSize, isUCS);
     count = qspSplitStr(gameString, QSP_STATIC_STR(QSP_STRSDELIM), &strs);
     qspFreeString(&gameString);
@@ -677,7 +764,7 @@ QSP_BOOL qspOpenGameStatus(void *data, int dataSize)
     qspCurWindowsChangedState = QSP_WIN_ALL;
     oldLocationState = qspLocationState;
     /* Restore included files first, the current location & the actions can belong to them */
-    qspRestoreCurrentIncludes();
+    qspRestoreCurrentIncFiles();
     if (qspLocationState != oldLocationState)
     {
         for (i = 0; i < actsCount; ++i)
@@ -724,7 +811,7 @@ void qspStatementOpenQst(QSPVariant *args, QSP_TINYINT QSP_UNUSED(count), QSP_TI
         if (qspIsAnyString(QSP_STR(args[0])))
         {
             int oldLocationState = qspLocationState;
-            qspCallOpenGame(QSP_STR(args[0]), QSP_TRUE);
+            qspCallOpenGame(QSP_STR(args[0]));
             if (qspLocationState != oldLocationState) return;
             qspRestartGame(QSP_FALSE);
         }
@@ -732,6 +819,24 @@ void qspStatementOpenQst(QSPVariant *args, QSP_TINYINT QSP_UNUSED(count), QSP_TI
     case QSP_STAT_INCLIB:
         qspIncludeGameFile(QSP_STR(args[0]));
         break;
+    }
+}
+
+void qspStatementFreeLib(QSPVariant *args, QSP_TINYINT count, QSP_TINYINT QSP_UNUSED(extArg))
+{
+    if (!qspCurIncFilesCount) return;
+    if (count)
+    {
+        if (qspIsAnyString(QSP_STR(args[0])))
+        {
+            qspRemoveIncFile(QSP_STR(args[0]));
+            qspCallRemoveGame(QSP_STR(args[0])); /* call the host anyway */
+        }
+    }
+    else
+    {
+        qspClearAllIncludes(QSP_FALSE);
+        qspCallRemoveGame(qspNullString);
     }
 }
 

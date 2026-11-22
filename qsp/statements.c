@@ -185,7 +185,7 @@ void qspInitStats(void)
     qspAddStatement(QSP_STAT_CLOSEALL, qspStatementCloseFile, 0, 0);
 
     qspAddStatement(QSP_STAT_INCLIB, qspStatementOpenQst, 1, 1, QSP_TYPE_STR);
-    qspAddStatement(QSP_STAT_FREELIB, qspStatementClear, 0, 0);
+    qspAddStatement(QSP_STAT_FREELIB, qspStatementFreeLib, 0, 1, QSP_TYPE_STR);
 
     qspAddStatement(QSP_STAT_OPENGAME, qspStatementOpenGame, 0, 1, QSP_TYPE_STR);
     qspAddStatement(QSP_STAT_SAVEGAME, qspStatementSaveGame, 0, 1, QSP_TYPE_STR);
@@ -1005,9 +1005,6 @@ INLINE void qspStatementClear(QSPVariant *QSP_UNUSED(args), QSP_TINYINT QSP_UNUS
         /* The order is important here */
         qspClearGlobalVars();
         qspClearAllObjectsWithEvents();
-        break;
-    case QSP_STAT_FREELIB:
-        qspClearAllIncludes(QSP_FALSE);
         break;
     }
 }

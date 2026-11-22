@@ -81,7 +81,9 @@ export interface QspWasmHost {
   onSystem?(cmd: string): void | Promise<void>;
   onSleep?(msecs: number): void | Promise<void>;
   onGetMSCount?(): number | Promise<number>;
-  onOpenGame?(file: string, isNewGame: boolean): void | Promise<void>;
+  onOpenGame?(file: string): void | Promise<void>;
+  onIncludeGame?(file: string): void | Promise<void>;
+  onRemoveGame?(file: string): void | Promise<void>;
   onInitGame?(isNewGame: boolean): void | Promise<void>;
   onOpenGameStatus?(file: string): void | Promise<void>;
   onSaveGameStatus?(file: string): void | Promise<void>;
@@ -179,7 +181,8 @@ export interface QspWasmModule {
   _QSPGetLastErrorData(res: ErrorPtr): void;
   _QSPGetErrorDesc(errorNum: number, res: StringPtr): void;
 
-  _QSPLoadGameWorldFromData(data: BufferPtr, size: number, isNewGame: Bool): Bool;
+  _QSPLoadGameWorldFromData(data: BufferPtr, size: number): Bool;
+  _QSPIncludeGameWorldFromData(file: CharsPtr, data: BufferPtr, size: number): Bool;
   _QSPSaveGameAsData(buf: BufferPtr, size: IntPtr, toRefreshUI: Bool): Bool; // size: in/out
   _QSPOpenSavedGameFromData(data: BufferPtr, size: number, toRefreshUI: Bool): Bool;
   _QSPRestartGame(toRefreshUI: Bool): Bool;

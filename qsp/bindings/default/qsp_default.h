@@ -119,7 +119,8 @@
     QSP_EXTERN QSPErrorInfo QSPGetLastErrorData(void);
     QSP_EXTERN QSPString QSPGetErrorDesc(int errorNum);
     /* Game */
-    QSP_EXTERN QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize, QSP_BOOL isNewGame);
+    QSP_EXTERN QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize);
+    QSP_EXTERN QSP_BOOL QSPIncludeGameWorldFromData(QSPString file, const void *data, int dataSize);
     QSP_EXTERN QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI);
     QSP_EXTERN QSP_BOOL QSPOpenSavedGameFromData(const void *data, int dataSize, QSP_BOOL toRefreshUI);
 

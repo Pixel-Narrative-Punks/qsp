@@ -24,6 +24,8 @@
     typedef struct
     {
         QSPString Name;
+        int NameIndex;
+        int FileIndex; /* -1 for the main game */
         QSPString Desc; /* base description */
         QSPCodeBlock *OnVisitCode; /* location code */
         QSPLocAct *Actions; /* base actions */
@@ -31,15 +33,10 @@
         int RefsCount;
     } QSPLocation;
 
-    typedef struct
-    {
-        int NameIndex; /* 0 for empty slot */
-        int Index;
-    } QSPLocSlot;
-
     extern QSPLocation **qspLocs;
     extern int qspLocsCount;
     extern int qspLocsCapacity;
+    extern int qspMainLocsCount;
     extern QSPLocation *qspCurLoc;
     extern int qspLocationState; /* allows to check if we have to terminate execution of the code */
     extern int qspFullRefreshCount;
@@ -49,6 +46,7 @@
     void qspInitWorld(void);
     void qspTerminateWorld(void);
     void qspTruncateWorld(int locsCount);
+    void qspRemoveIncFileLocations(int fileIndex);
     void qspFreeLocation(QSPLocation *loc);
     QSPLocation *qspAddLocation(QSPString name);
     int qspGetLocNameIndex(QSPString name, QSP_BOOL toIntern);
