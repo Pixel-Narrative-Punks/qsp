@@ -5,7 +5,7 @@
 #include "../../errors.h"
 #include "../../game.h"
 
-QSP_BOOL qspOpenQuestFromFILE(FILE *f, QSP_BOOL isNewGame)
+QSP_BOOL qspOpenQuestFromFILE(FILE *f)
 {
     QSP_BOOL res;
     void *buf;
@@ -16,7 +16,23 @@ QSP_BOOL qspOpenQuestFromFILE(FILE *f, QSP_BOOL isNewGame)
     if (!buf) return QSP_FALSE;
     fseek(f, 0, SEEK_SET);
     fread(buf, 1, fileSize, f);
-    res = qspOpenGame(buf, fileSize, isNewGame);
+    res = qspOpenGame(buf, fileSize);
+    free(buf);
+    return res;
+}
+
+QSP_BOOL qspIncludeQuestFromFILE(QSPString file, FILE *f)
+{
+    QSP_BOOL res;
+    void *buf;
+    int fileSize;
+    fseek(f, 0, SEEK_END);
+    fileSize = ftell(f);
+    buf = malloc(fileSize);
+    if (!buf) return QSP_FALSE;
+    fseek(f, 0, SEEK_SET);
+    fread(buf, 1, fileSize, f);
+    res = qspIncludeGame(file, buf, fileSize);
     free(buf);
     return res;
 }

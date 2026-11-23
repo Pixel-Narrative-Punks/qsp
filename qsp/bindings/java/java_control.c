@@ -609,7 +609,7 @@ JNIEXPORT jstring JNICALL Java_com_libqsp_jni_QSPLib_getErrorDesc(JNIEnv *env, j
 #include <unistd.h>
 
 /* Loading a new game from FileDescriptor */
-JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromFD(JNIEnv *env, jobject api, jint fileDescriptor, jboolean isNewGame)
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromFD(JNIEnv *env, jobject api, jint fileDescriptor)
 {
     FILE *f;
     int nativeFd;
@@ -623,7 +623,29 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromFD(JNIEnv
         return QSP_FALSE;
     }
     qspPrepareExecution(QSP_FALSE);
-    res = qspOpenQuestFromFILE(f, isNewGame);
+    res = qspOpenQuestFromFILE(f);
+    fclose(f);
+    return res;
+}
+/* Including a game file from FileDescriptor */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_includeGameWorldFromFD(JNIEnv *env, jobject api, jstring file, jint fileDescriptor)
+{
+    FILE *f;
+    int nativeFd;
+    QSP_BOOL res;
+    QSPString fileName;
+    if (fileDescriptor < 0) return QSP_FALSE;
+    nativeFd = dup(fileDescriptor);
+    if (nativeFd < 0) return QSP_FALSE;
+    if (!(f = fdopen(nativeFd, "rb")))
+    {
+        close(nativeFd);
+        return QSP_FALSE;
+    }
+    qspPrepareExecution(QSP_FALSE);
+    fileName = qspFromJavaString(env, file);
+    res = qspIncludeQuestFromFILE(fileName, f);
+    qspFreeString(&fileName);
     fclose(f);
     return res;
 }
@@ -673,8 +695,8 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_openSavedGameFromFD(JNIEnv
 
 #endif
 
-/* Load game from data */
-JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromData(JNIEnv *env, jobject api, jbyteArray data, jboolean isNewGame)
+/* Load a new game from data */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromData(JNIEnv *env, jobject api, jbyteArray data)
 {
     QSP_BOOL res;
     jint dataSize;
@@ -682,7 +704,23 @@ JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromData(JNIE
     qspPrepareExecution(QSP_FALSE);
     dataSize = (*env)->GetArrayLength(env, data);
     arrayData = (*env)->GetByteArrayElements(env, data, 0);
-    res = qspOpenGame(arrayData, dataSize, isNewGame);
+    res = qspOpenGame(arrayData, dataSize);
+    (*env)->ReleaseByteArrayElements(env, data, arrayData, JNI_ABORT);
+    return res;
+}
+/* Include a game file from data */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_includeGameWorldFromData(JNIEnv *env, jobject api, jstring file, jbyteArray data)
+{
+    QSP_BOOL res;
+    jint dataSize;
+    jbyte *arrayData;
+    QSPString fileName;
+    qspPrepareExecution(QSP_FALSE);
+    fileName = qspFromJavaString(env, file);
+    dataSize = (*env)->GetArrayLength(env, data);
+    arrayData = (*env)->GetByteArrayElements(env, data, 0);
+    res = qspIncludeGame(fileName, arrayData, dataSize);
+    qspFreeString(&fileName);
     (*env)->ReleaseByteArrayElements(env, data, arrayData, JNI_ABORT);
     return res;
 }
@@ -811,7 +849,9 @@ JNIEXPORT void JNICALL Java_com_libqsp_jni_QSPLib_init(JNIEnv *env, jobject api,
     qspSetCallback(QSP_CALL_SETTIMER, (*env)->GetMethodID(env, qspApiClass, "onSetTimer", "(I)V"));
     qspSetCallback(QSP_CALL_SETINPUTSTRTEXT, (*env)->GetMethodID(env, qspApiClass, "onSetInputStrText", "(Ljava/lang/String;)V"));
     qspSetCallback(QSP_CALL_SYSTEM, (*env)->GetMethodID(env, qspApiClass, "onSystem", "(Ljava/lang/String;)V"));
-    qspSetCallback(QSP_CALL_OPENGAME, (*env)->GetMethodID(env, qspApiClass, "onOpenGame", "(Ljava/lang/String;Z)V"));
+    qspSetCallback(QSP_CALL_OPENGAME, (*env)->GetMethodID(env, qspApiClass, "onOpenGame", "(Ljava/lang/String;)V"));
+    qspSetCallback(QSP_CALL_INCLUDEGAME, (*env)->GetMethodID(env, qspApiClass, "onIncludeGame", "(Ljava/lang/String;)V"));
+    qspSetCallback(QSP_CALL_REMOVEGAME, (*env)->GetMethodID(env, qspApiClass, "onRemoveGame", "(Ljava/lang/String;)V"));
     qspSetCallback(QSP_CALL_INITGAME, (*env)->GetMethodID(env, qspApiClass, "onInitGame", "(Z)V"));
     qspSetCallback(QSP_CALL_OPENGAMESTATUS, (*env)->GetMethodID(env, qspApiClass, "onOpenGameStatus", "(Ljava/lang/String;)V"));
     qspSetCallback(QSP_CALL_SAVEGAMESTATUS, (*env)->GetMethodID(env, qspApiClass, "onSaveGameStatus", "(Ljava/lang/String;)V"));

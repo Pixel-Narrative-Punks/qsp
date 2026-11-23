@@ -391,10 +391,16 @@ void QSPGetErrorDesc(int errorNum, QSPString *desc)
     *desc = qspGetErrorDesc(errorNum);
 }
 
-QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize, QSP_BOOL isNewGame)
+QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize)
 {
     qspPrepareExecution(QSP_FALSE);
-    return qspOpenGame((void *)data, dataSize, isNewGame);
+    return qspOpenGame((void *)data, dataSize);
+}
+
+QSP_BOOL QSPIncludeGameWorldFromData(QSP_CHAR *file, const void *data, int dataSize)
+{
+    qspPrepareExecution(QSP_FALSE);
+    return qspIncludeGame(qspStringFromC(file), (void *)data, dataSize);
 }
 
 QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI)

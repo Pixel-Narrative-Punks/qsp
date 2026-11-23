@@ -78,7 +78,8 @@
     QSP_WASM_EXPORT void QSPGetLastErrorData(QSPErrorInfo *error);
     QSP_WASM_EXPORT void QSPGetErrorDesc(int errorNum, QSPString *desc);
     /* Game */
-    QSP_WASM_EXPORT QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize, QSP_BOOL isNewGame);
+    QSP_WASM_EXPORT QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize);
+    QSP_WASM_EXPORT QSP_BOOL QSPIncludeGameWorldFromData(QSP_CHAR *file, const void *data, int dataSize);
     QSP_WASM_EXPORT QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI);
     QSP_WASM_EXPORT QSP_BOOL QSPOpenSavedGameFromData(const void *data, int dataSize, QSP_BOOL toRefreshUI);
 

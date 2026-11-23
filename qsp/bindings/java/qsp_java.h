@@ -69,7 +69,8 @@
     QSPVariant qspFromJavaVariant(JNIEnv *env, jobject variant);
     jobject qspToJavaVarItem(JNIEnv *env, QSPVariant *value, QSPVariant *key);
 
-    QSP_BOOL qspOpenQuestFromFILE(FILE *f, QSP_BOOL isNewGame);
+    QSP_BOOL qspOpenQuestFromFILE(FILE *f);
+    QSP_BOOL qspIncludeQuestFromFILE(QSPString file, FILE *f);
     QSP_BOOL qspSaveGameStatusToFILE(FILE *f);
     QSP_BOOL qspOpenGameStatusFromFILE(FILE *f);
 

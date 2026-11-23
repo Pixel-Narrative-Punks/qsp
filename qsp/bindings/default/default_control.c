@@ -452,11 +452,17 @@ QSPString QSPGetErrorDesc(int errorNum)
 /* ------------------------------------------------------------ */
 /* Game controls */
 
-/* Load game from data */
-QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize, QSP_BOOL isNewGame)
+/* Load a new game from data */
+QSP_BOOL QSPLoadGameWorldFromData(const void *data, int dataSize)
 {
     qspPrepareExecution(QSP_FALSE);
-    return qspOpenGame((void *)data, dataSize, isNewGame);
+    return qspOpenGame((void *)data, dataSize);
+}
+/* Include a game file from data */
+QSP_BOOL QSPIncludeGameWorldFromData(QSPString file, const void *data, int dataSize)
+{
+    qspPrepareExecution(QSP_FALSE);
+    return qspIncludeGame(file, (void *)data, dataSize);
 }
 /* Save game state to a buffer */
 QSP_BOOL QSPSaveGameAsData(void *buf, int *bufSize, QSP_BOOL toRefreshUI)

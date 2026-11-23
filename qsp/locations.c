@@ -19,69 +19,66 @@
 QSPLocation **qspLocs = 0;
 int qspLocsCount = 0;
 int qspLocsCapacity = 0;
+int qspMainLocsCount = 0;
 
 QSPLocation *qspCurLoc = 0;
 int qspLocationState = 0;
 int qspFullRefreshCount = 0;
 int qspCurCallDepth = 0;
 
-static QSPLocSlot *qspLocsSlots = 0; /* hash table by names, QSP_SLOTSCOUNT(qspLocsCapacity) slots */
+static QSPLocation **qspLocsSlots = 0; /* hash table by names, QSP_SLOTSCOUNT(qspLocsCapacity) slots */
 
-INLINE QSPLocSlot *qspNewLocsSlots(int capacity);
-INLINE QSPLocSlot *qspGetLocSlot(int nameIndex);
-INLINE QSPLocSlot *qspGetEmptyLocSlot(int nameIndex);
-INLINE void qspRebuildLocs(int newCapacity);
+INLINE QSPLocation **qspGetLocSlot(int nameIndex);
+INLINE QSPLocation **qspGetEmptyLocSlot(int nameIndex);
+INLINE void qspRebuildLocsSlots(void);
+INLINE void qspResizeLocs(int newCapacity);
 INLINE void qspAddBaseDescAndActions(QSPLocation *loc);
 INLINE void qspExecLocation(QSPLocation *loc, QSP_BOOL toChangeDesc);
 
-INLINE QSPLocSlot *qspNewLocsSlots(int capacity)
+INLINE QSPLocation **qspGetLocSlot(int nameIndex)
 {
-    QSPLocSlot *slots = (QSPLocSlot *)malloc(capacity * sizeof(QSPLocSlot));
-    memset(slots, 0, capacity * sizeof(QSPLocSlot));
-    return slots;
-}
-
-INLINE QSPLocSlot *qspGetLocSlot(int nameIndex)
-{
-    QSPLocSlot *slot;
+    QSPLocation **slot;
     int mask = QSP_SLOTSMASK(qspLocsCapacity), ind = (int)(qspGetIndexHash(nameIndex) & mask);
-    while ((slot = qspLocsSlots + ind)->NameIndex && slot->NameIndex != nameIndex)
+    while (*(slot = qspLocsSlots + ind) && (*slot)->NameIndex != nameIndex)
         ind = (ind + 1) & mask;
     return slot;
 }
 
-INLINE QSPLocSlot *qspGetEmptyLocSlot(int nameIndex)
+INLINE QSPLocation **qspGetEmptyLocSlot(int nameIndex)
 {
     int mask = QSP_SLOTSMASK(qspLocsCapacity), ind = (int)(qspGetIndexHash(nameIndex) & mask);
-    while (qspLocsSlots[ind].NameIndex) ind = (ind + 1) & mask;
+    while (qspLocsSlots[ind]) ind = (ind + 1) & mask;
     return qspLocsSlots + ind;
 }
 
-INLINE void qspRebuildLocs(int newCapacity)
+INLINE void qspRebuildLocsSlots(void)
 {
-    QSPLocSlot *slot, *oldSlot, *oldSlots = qspLocsSlots;
-    int i, oldSlotsCount = QSP_SLOTSCOUNT(qspLocsCapacity);
+    int i;
+    QSPLocation **slot;
+    memset(qspLocsSlots, 0, QSP_SLOTSCOUNT(qspLocsCapacity) * sizeof(QSPLocation *));
+    for (i = 0; i < qspLocsCount; ++i)
+    {
+        slot = qspGetEmptyLocSlot(qspLocs[i]->NameIndex);
+        *slot = qspLocs[i];
+    }
+}
+
+INLINE void qspResizeLocs(int newCapacity)
+{
     qspLocsCapacity = newCapacity;
     qspLocs = (QSPLocation **)realloc(qspLocs, newCapacity * sizeof(QSPLocation *));
-    qspLocsSlots = qspNewLocsSlots(QSP_SLOTSCOUNT(newCapacity));
-    /* Keep the slots of the first qspLocsCount locations */
-    for (i = 0, oldSlot = oldSlots; i < oldSlotsCount; ++i, ++oldSlot)
-    {
-        if (oldSlot->NameIndex && oldSlot->Index < qspLocsCount)
-        {
-            slot = qspGetEmptyLocSlot(oldSlot->NameIndex);
-            *slot = *oldSlot;
-        }
-    }
-    free(oldSlots);
+    qspLocsSlots = (QSPLocation **)realloc(qspLocsSlots, QSP_SLOTSCOUNT(newCapacity) * sizeof(QSPLocation *));
+    qspRebuildLocsSlots();
 }
 
 void qspInitWorld(void)
 {
     qspLocsCount = 0;
     qspLocsCapacity = QSP_LOCSCAPACITY;
+    qspMainLocsCount = 0;
     qspLocs = (QSPLocation **)malloc(qspLocsCapacity * sizeof(QSPLocation *));
-    qspLocsSlots = qspNewLocsSlots(QSP_SLOTSCOUNT(qspLocsCapacity));
+    qspLocsSlots = (QSPLocation **)malloc(QSP_SLOTSCOUNT(qspLocsCapacity) * sizeof(QSPLocation *));
+    memset(qspLocsSlots, 0, QSP_SLOTSCOUNT(qspLocsCapacity) * sizeof(QSPLocation *));
 }
 
 void qspTerminateWorld(void)
@@ -94,14 +91,41 @@ void qspTerminateWorld(void)
 void qspTruncateWorld(int locsCount)
 {
     int i;
+    if (locsCount < 0 || locsCount >= qspLocsCount) return;
     for (i = locsCount; i < qspLocsCount; ++i)
     {
         if (qspLocs[i] == qspCurLoc)
-            qspUpdateLocation(&qspCurLoc, 0); /* the current location has to be in the world */
+            qspUpdateLocation(&qspCurLoc, 0); /* the current location has to be valid */
         qspReleaseLocation(qspLocs[i]);
     }
     qspLocsCount = locsCount;
-    qspRebuildLocs(qspLocsCapacity); /* drops the slots of the removed locations */
+    if (locsCount < qspMainLocsCount)
+        qspMainLocsCount = locsCount;
+    qspRebuildLocsSlots(); /* drops the slots of the removed locations */
+}
+
+void qspRemoveIncFileLocations(int fileIndex)
+{
+    int i, locsCount;
+    if (fileIndex < 0) return;
+    if (qspCurLoc && qspCurLoc->FileIndex == fileIndex)
+        qspUpdateLocation(&qspCurLoc, 0); /* the current location has to be valid */
+    locsCount = qspMainLocsCount;
+    for (i = qspMainLocsCount; i < qspLocsCount; ++i)
+    {
+        if (qspLocs[i]->FileIndex == fileIndex)
+            qspReleaseLocation(qspLocs[i]);
+        else
+        {
+            /* Re-insert location that doesn't belong to the specified file */
+            qspLocs[locsCount++] = qspLocs[i];
+        }
+    }
+    if (locsCount < qspLocsCount)
+    {
+        qspLocsCount = locsCount;
+        qspRebuildLocsSlots(); /* drops the slots of the removed locations */
+    }
 }
 
 void qspFreeLocation(QSPLocation *loc)
@@ -125,31 +149,30 @@ void qspFreeLocation(QSPLocation *loc)
 
 QSPLocation *qspAddLocation(QSPString name)
 {
-    QSPLocation *loc;
-    QSPLocSlot *slot;
+    QSPLocation *loc, **slot;
     int nameIndex;
     name = qspDelSpc(name);
     nameIndex = qspGetNameIndex(name, QSP_TRUE);
     if (!nameIndex) return 0; /* empty names aren't allowed */
     slot = qspGetLocSlot(nameIndex);
-    if (slot->NameIndex) return 0;
+    if (*slot) return 0;
     if (qspLocsCount >= qspLocsCapacity)
     {
-        qspRebuildLocs(qspLocsCapacity * 2);
+        qspResizeLocs(qspLocsCapacity * 2);
         slot = qspGetEmptyLocSlot(nameIndex);
     }
     /* Create a new location */
     loc = (QSPLocation *)malloc(sizeof(QSPLocation));
     loc->Name = qspCopyToNewText(name);
+    loc->NameIndex = nameIndex;
+    loc->FileIndex = -1;
     loc->Desc = qspNullString;
     loc->OnVisitCode = 0;
     loc->Actions = 0;
     loc->ActionsCount = 0;
     loc->RefsCount = 1;
-    qspLocs[qspLocsCount] = loc;
-    slot->NameIndex = nameIndex;
-    slot->Index = qspLocsCount;
-    ++qspLocsCount;
+    qspLocs[qspLocsCount++] = loc;
+    *slot = loc;
     return loc;
 }
 
@@ -162,10 +185,7 @@ int qspGetLocNameIndex(QSPString name, QSP_BOOL toIntern)
 QSPLocation *qspGetLoc(int nameIndex)
 {
     if (nameIndex > 0) /* empty names aren't allowed */
-    {
-        QSPLocSlot *slot = qspGetLocSlot(nameIndex);
-        if (slot->NameIndex) return qspLocs[slot->Index];
-    }
+        return *qspGetLocSlot(nameIndex);
     return 0;
 }
 

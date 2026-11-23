@@ -65,7 +65,9 @@
         QSP_CALL_SETTIMER, /* void func(int msecs) */
         QSP_CALL_SETINPUTSTRTEXT, /* void func(QSPString text) */
         QSP_CALL_SYSTEM, /* void func(QSPString cmd) */
-        QSP_CALL_OPENGAME, /* void func(QSPString file, QSP_BOOL isNewGame) */
+        QSP_CALL_OPENGAME, /* void func(QSPString file) */
+        QSP_CALL_INCLUDEGAME, /* void func(QSPString file) */
+        QSP_CALL_REMOVEGAME, /* void func(QSPString file) */
         QSP_CALL_INITGAME, /* void func(QSP_BOOL isNewGame) */
         QSP_CALL_OPENGAMESTATUS, /* void func(QSPString file) */
         QSP_CALL_SAVEGAMESTATUS, /* void func(QSPString file) */

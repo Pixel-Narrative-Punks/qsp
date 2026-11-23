@@ -274,18 +274,34 @@ JNIEXPORT jstring JNICALL Java_com_libqsp_jni_QSPLib_getErrorDesc
 /*
  * Class:     com_libqsp_jni_QSPLib
  * Method:    loadGameWorldFromData
- * Signature: ([BZ)Z
+ * Signature: ([B)Z
  */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromData
-  (JNIEnv *, jobject, jbyteArray, jboolean);
+  (JNIEnv *, jobject, jbyteArray);
 
 /*
  * Class:     com_libqsp_jni_QSPLib
  * Method:    loadGameWorldFromFD
- * Signature: (IZ)Z
+ * Signature: (I)Z
  */
 JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_loadGameWorldFromFD
-  (JNIEnv *, jobject, jint, jboolean);
+  (JNIEnv *, jobject, jint);
+
+/*
+ * Class:     com_libqsp_jni_QSPLib
+ * Method:    includeGameWorldFromData
+ * Signature: (Ljava/lang/String;[B)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_includeGameWorldFromData
+  (JNIEnv *, jobject, jstring, jbyteArray);
+
+/*
+ * Class:     com_libqsp_jni_QSPLib
+ * Method:    includeGameWorldFromFD
+ * Signature: (Ljava/lang/String;I)Z
+ */
+JNIEXPORT jboolean JNICALL Java_com_libqsp_jni_QSPLib_includeGameWorldFromFD
+  (JNIEnv *, jobject, jstring, jint);
 
 /*
  * Class:     com_libqsp_jni_QSPLib

@@ -40,7 +40,9 @@
     void qspCallSystem(QSPString cmd);
     void qspCallSleep(int msecs);
     int qspCallGetMSCount(void);
-    void qspCallOpenGame(QSPString file, QSP_BOOL isNewGame);
+    void qspCallOpenGame(QSPString file);
+    void qspCallIncludeGame(QSPString file);
+    void qspCallRemoveGame(QSPString file);
     void qspCallInitGame(QSP_BOOL isNewGame);
     void qspCallOpenGameStatus(QSPString file);
     void qspCallSaveGameStatus(QSPString file);
