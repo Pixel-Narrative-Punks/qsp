@@ -9,7 +9,23 @@
 @run
 @debug 0
 @expect-events
-debug test:1:-1 'first line'
-debug test:2:-1 A = 10
-debug test:3:-1 'third line'
+debug test:1:0:-1 'first line'
+debug test:2:0:-1 A = 10
+debug test:3:0:-1 'third line'
 main_changed first line\r\nthird line\r\n
+
+// ------------------------------------------------------------
+// Not in qsp-wasm-engine
+
+@test the lines of dynamic code are reported with their line within the code
+@src
+'first line'
+dynamic 'a = 1'
+@debug 1
+@run
+@debug 0
+@expect-events
+debug test:1:0:-1 'first line'
+debug test:2:0:-1 DYNAMIC 'a = 1'
+debug test:2:1:-1 A = 1
+main_changed first line\r\n

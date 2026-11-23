@@ -1,6 +1,8 @@
 // Ported from qsp-wasm-engine tests/api/current-location.test.ts
-// @expect-curloc reads QSPGetCurLocation, @expect-state reads QSPGetCurStateData as LOCATION:LINE:ACTION;
-// @watch-msg-state records both while the MSG callback runs: "state curloc=LOC exec=LOCATION:LINE:ACTION"
+// @expect-curloc reads QSPGetCurLocation, @expect-state reads QSPGetCurStateData as LOCATION:LINE:LOCAL:ACTION
+// (LOCAL is the line within the dynamic code, 0 for top-level code);
+// @watch-msg-state records both while the MSG callback runs: "state curloc=LOC exec=LOCATION:LINE:LOCAL:ACTION",
+// @watch-msg-code records QSPGetCurStateCode as the events "code LINE: CODE"
 
 @test getCurrentLocation reads $CURLOC, not the location executing code
 @game
@@ -18,7 +20,7 @@ msg 'in helper'
 @restart
 @expect-curloc start
 @exec gt 'hall'
-@expect-event state curloc=hall exec=helper:1:-1
+@expect-event state curloc=hall exec=helper:1:0:-1
 @expect-curloc hall
 @expect $curloc => 'hall'
 
@@ -28,8 +30,8 @@ msg 'in helper'
 x = 1
 msg 'hi'
 @run
-@expect-event state curloc= exec=test:2:-1
-@expect-state :0:-1
+@expect-event state curloc= exec=test:2:0:-1
+@expect-state :0:0:-1
 
 // ------------------------------------------------------------
 // Not in qsp-wasm-engine
@@ -45,4 +47,77 @@ msg 'in action'
 @restart
 @select-act 0
 @exec-act
-@expect-event state curloc=start exec=start:2:0
+@expect-event state curloc=start exec=start:2:0:0
+
+@test the state in dynamic code gives the line within it, the code is the dynamic code
+@watch-msg-state
+@watch-msg-code
+@src
+x = 1
+dynamic '
+y = 1
+msg ''in dyn''
+'
+@run
+@expect-events
+main_changed
+stats_changed
+actions_changed []
+objects_changed []
+msg in dyn
+state curloc= exec=test:2:3:-1
+code 1:
+code 2: Y = 1
+code 3: MSG 'in dyn'
+code 4:
+
+@test the code of a location in a dialog
+@watch-msg-code
+@src
+x = 1
+msg 'hi'
+@run
+@expect-event code 1: X = 1
+@expect-event code 2: MSG 'hi'
+@expect-count 2 code
+
+@test the code of a base action in a dialog
+@watch-msg-code
+@game
+# start
+--
+@action start | act
+x = 1
+msg 'in action'
+@restart
+@select-act 0
+@clear-events
+@exec-act
+@expect-event code 1: X = 1
+@expect-event code 2: MSG 'in action'
+@expect-count 2 code
+
+@test an action added by ACT runs within the code of its location
+@watch-msg-state
+@watch-msg-code
+@src
+x = 0
+act 'a':
+  x = 1
+  msg 'in act'
+end
+@run
+@select-act 0
+@clear-events
+@exec-act
+@expect-event state curloc= exec=test:4:0:-1
+@expect-event code 2: ACT 'a':
+@expect-count 5 code
+
+@test the code executed by the API has no location
+@watch-msg-state
+@watch-msg-code
+@exec x = 1 & msg 'api'
+@expect-event state curloc= exec=:0:1:-1
+@expect-event code 1: X = 1 & MSG 'api'
+@expect-count 1 code

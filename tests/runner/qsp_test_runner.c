@@ -456,6 +456,7 @@ static struct
     char **MsgWatches; /* variables read while the MSG callback runs */
     int MsgWatchesCount;
     int IsMsgStateWatched; /* the MSG callback records the current location & the execution state */
+    int IsMsgCodeWatched; /* the MSG callback records the executing code */
     int CalcBufferSize; /* the buffer of QSPCalculateStrExpression, set by @calc-buffer */
     char *InitGameCode; /* code executed by the INITGAME callback */
     char **RememberedNames; /* numbers kept by @remember, they outlive the engine */
@@ -655,14 +656,42 @@ static void cbRefresh(QSP_BOOL isForced, QSP_BOOL QSP_UNUSED_isNewDesc)
     refreshState(isForced);
 }
 
-/* QSPGetCurStateData: LOCATION:LINE:ACTION, where the engine executes code */
+/* QSPGetCurStateData: LOCATION:LINE:LOCAL:ACTION, where the engine executes code;
+   LOCAL is the line within the dynamic code, 0 for top-level code */
 static void addCurState(StrBuf *sb)
 {
     QSPString loc = {0, 0};
     int actIndex = 0, line = 0, intLine = 0;
     QSPGetCurStateData(&loc, &actIndex, &line, &intLine);
     addEscaped(sb, loc);
-    sbAddf(sb, ":%d:%d", line, actIndex);
+    sbAddf(sb, ":%d:%d:%d", line, intLine, actIndex);
+}
+
+/* QSPGetCurStateCode: the executing code as the events "code LINE: CODE", "code none" for -1 */
+static void addCurCodeEvents(void)
+{
+    int i, count = QSPGetCurStateCode(0, 0);
+    QSPLineInfo *lines;
+    if (count < 0)
+    {
+        addEvent("code none");
+        return;
+    }
+    lines = xmalloc((count + 1) * sizeof(*lines));
+    QSPGetCurStateCode(lines, count);
+    for (i = 0; i < count; ++i)
+    {
+        StrBuf sb = {0};
+        sbAddf(&sb, "code %d:", lines[i].LineNum);
+        if (!isEmptyStr(lines[i].Line))
+        {
+            sbAdd(&sb, " ");
+            addEscaped(&sb, lines[i].Line);
+        }
+        addEvent(sbStr(&sb));
+        free(sb.Data);
+    }
+    free(lines);
 }
 
 static void cbDebug(QSPString str)
@@ -737,6 +766,7 @@ static void cbMsg(QSPString str)
         addEvent(sbStr(&sb));
         free(sb.Data);
     }
+    if (T.IsMsgCodeWatched) addCurCodeEvents();
 }
 static void cbView(QSPString file) { eventWithText("view", file, 1); }
 static void cbSetInput(QSPString text) { eventWithText("user_input", text, 1); }
@@ -1359,6 +1389,7 @@ static void resetEngine(void)
     freeStrings(&T.VersionReplies, &T.VersionRepliesCount);
     freeStrings(&T.MsgWatches, &T.MsgWatchesCount);
     T.IsMsgStateWatched = 0;
+    T.IsMsgCodeWatched = 0;
     T.CalcBufferSize = 0;
     free(T.InitGameCode);
     T.InitGameCode = 0;
@@ -2080,6 +2111,13 @@ static void runCommand(const char *line, char **block, int blockCount)
             fail("'@watch-msg-state' takes no argument");
         else
             T.IsMsgStateWatched = 1;
+    }
+    else if ((arg = command(line, "@watch-msg-code")))
+    {
+        if (*arg)
+            fail("'@watch-msg-code' takes no argument");
+        else
+            T.IsMsgCodeWatched = 1;
     }
     else if ((arg = command(line, "@debug")))
         QSPEnableDebugMode(atoi(arg) != 0);

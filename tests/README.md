@@ -60,7 +60,8 @@ before the first action of the test.
 | `@clock N` | sets the clock of the host to `N` milliseconds; the clock starts at 0 with the test and can't go back. The callback returns the time passed since its previous call, so `MSECSCOUNT` gives the time since the start of the test or since the last restart of the game |
 | `@init-game CODE` | the `INITGAME` callback executes `CODE` with `QSPExecString`; an error stops the call that started the game |
 | `@calc-buffer N` | the size of the buffer of `QSPCalculateStrExpression` in characters with the final zero (32K by default) |
-| `@watch-msg-state` | every `MSG` callback also records the event `state curloc=LOC exec=LOCATION:LINE:ACTION` with `QSPGetCurLocation` & `QSPGetCurStateData` |
+| `@watch-msg-state` | every `MSG` callback also records the event `state curloc=LOC exec=LOCATION:LINE:LOCAL:ACTION` with `QSPGetCurLocation` & `QSPGetCurStateData` |
+| `@watch-msg-code` | every `MSG` callback also records the executing code (`QSPGetCurStateCode`) as the events `code NUM: CODE`, or `code none` for -1 |
 | `@watch-msg NAME` | every `MSG` callback also records the event `read NAME => VALUE`, the variable is read with `QSPGetVarValue` while the callback runs (`$NAME`, `#NAME`, `%NAME` give the typed view) |
 
 ### Actions
@@ -101,7 +102,7 @@ without the prefix.
 | `@expect-acts [a; b\|img]` / `@expect-objs [...]` | current actions / objects; an object shows ` => TITLE` when its title differs from the name |
 | `@expect-selact N` / `@expect-selobj N` | selected action / object |
 | `@expect-curloc NAME` | `QSPGetCurLocation`: the current location (`$CURLOC`), not the location executing code |
-| `@expect-state LOCATION:LINE:ACTION` | `QSPGetCurStateData`: where the engine executes code, `:0:-1` when it's idle |
+| `@expect-state LOCATION:LINE:LOCAL:ACTION` | `QSPGetCurStateData`: where the engine executes code, `LOCAL` is the line within the dynamic code (0 for top-level code); `:0:0:-1` when it's idle |
 | `@expect-error NAME [(location 'L', line N, local N, action A) LINE]` | the pending error, by name or with its position: `line` is the top-level line, `local` the line within the dynamic code (`DYNAMIC`, `DYNEVAL`, a code value, the code executed by the API), 0 for top-level code, `LINE` its text (a prefix of the description is enough) |
 | `@expect-event TEXT` / `@expect-no-event PREFIX` | an event was / no event starting with `PREFIX` was recorded |
 | `@expect-count N PREFIX` | number of events starting with `PREFIX` |
@@ -152,7 +153,7 @@ Callbacks are recorded with the names used by qsp-wasm-engine:
 `wait N`, `timer N`, `play_file FILE VOLUME`, `is_play FILE`,
 `close_file [FILE]`, `panel_visibility TYPE 0/1`, `open_game FILE IS_NEW`,
 `init_game IS_NEW`,
-`save_game [FILE]`, `load_save [FILE]`, `debug LOC:LINE:ACT CODE`,
+`save_game [FILE]`, `load_save [FILE]`, `debug LOC:LINE:LOCAL:ACT CODE`,
 `error NAME`. An argument in brackets is omitted when it's empty.
 `panel_visibility` passes the `QSP_WIN_*` flags. The refresh callback
 records the windows marked by `QSPGetWindowsChangedState`, or every window
