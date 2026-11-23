@@ -20,14 +20,39 @@ VIEW
 @expect-count 1 actions_changed
 @expect-count 1 objects_changed
 
+// A color with the alpha from 128 is above INT_MAX: it's negative in the default build & positive with
+// QSP_USE_BIGINT. The expectations sum the bytes, the arithmetic of both builds wraps the same way.
+// wasm: x => -12574704
 @test RGB
 @src
 x = RGB(16, 32, 64)
 @run
-@expect x => -12574704
+@expect x = 16 + 32 * 256 + 64 * 65536 + 255 * 16777216 => 1
 
+// wasm: x => -2143281136
 @test RGB with alpha
 @src
 x = RGB(16, 32, 64, 128)
 @run
-@expect x => -2143281136
+@expect x = 16 + 32 * 256 + 64 * 65536 + 128 * 16777216 => 1
+
+// ------------------------------------------------------------
+// Not in qsp-wasm-engine
+
+@test RGB: a color with the alpha below 128 is the same number in every build
+@src
+x = RGB(16, 32, 64, 127)
+@run
+@expect x => 2134908944
+
+@test RGB: the alpha is 255 by default
+@src
+x = RGB(16, 32, 64)
+@run
+@expect x = RGB(16, 32, 64, 255) => 1
+
+@test RGB: the components are clamped to 0..255
+@src
+x = RGB(300, -5, 256, 1000) & y = RGB(-1, 0, 255, -7)
+@run
+@expect [x = RGB(255, 0, 255, 255), y = RGB(0, 0, 255, 0)] => [1, 1]

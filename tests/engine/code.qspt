@@ -63,11 +63,12 @@ a = 1 && b = 2 & & c = 3
 @run
 @expect $x => '12334'
 
+// wasm: x => -14620148; the number depends on the build (QSP_USE_BIGINT), see graphics.qspt
 @test function argument gets converted to number
 @src
  x = rgb('12', '234', 32)
 @run
-@expect x => -14620148
+@expect x = rgb(12, 234, 32) => 1
 
 @test function argument cant be converted to number
 @src
