@@ -8,6 +8,7 @@ showobjs 0
 @clear-events
 @restart
 @expect-events
+remove_game
 timer 500
 user_input
 view

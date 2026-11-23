@@ -1,5 +1,8 @@
 // Ported from qsp-wasm-engine tests/engine/modules.test.ts
-// The second argument of the OPENGAME callback is "new game": 1 for OPENQST, 0 for INCLIB.
+// OPENQST calls the OPENGAME callback (event "open_game FILE"), the host loads the file as a new game;
+// INCLIB calls the INCLUDEGAME callback ("include_game FILE"), the host includes the file with
+// QSPIncludeGameWorldFromData; the REMOVEGAME callback ("remove_game [FILE]", every file for no name)
+// tells the host which files the engine removed.
 // Callbacks are synchronous: the code after SAVEGAME / OPENGAME runs right away.
 
 // The game isn't found, so OPENQST restarts the current game and stops the code
@@ -7,7 +10,7 @@
 @src
 x = 1 & OPENQST '1.qsp' & x = 2
 @run
-@expect-event open_game 1.qsp 1
+@expect-event open_game 1.qsp
 @expect x => 1
 
 @test INCLIB should add module
@@ -17,7 +20,7 @@ x = 1 & OPENQST '1.qsp' & x = 2
 @src
 x = 1 & INCLIB '1.qsp' & x = 2
 @run
-@expect-event open_game 1.qsp 0
+@expect-event include_game 1.qsp
 @exec has_other = loc('other')
 @expect x => 2
 @expect has_other => 1
@@ -30,7 +33,7 @@ x = 1 & INCLIB '1.qsp' & x = 2
 l = loc('other') & INCLIB '1.qsp'
 @run
 @expect l => 0
-@expect-event open_game 1.qsp 0
+@expect-event include_game 1.qsp
 @exec l = loc('other')
 @expect l => 1
 @exec FREELIB
@@ -64,3 +67,144 @@ x = 1 & OPENGAME & x = 2
 @run
 @expect-event load_save
 @expect x => 2
+
+// ------------------------------------------------------------
+// Not in qsp-wasm-engine: including & removing the files
+
+@test INCLIB: a file is included once
+@module 1.qsp
+# one
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp' & INCLIB '1.qsp'
+@expect-events
+include_game 1.qsp
+
+@test INCLIB: a file the host doesn't have adds no locations and no error
+@game
+# start
+--
+@exec INCLIB 'missing.qsp'
+@expect-events
+include_game missing.qsp
+@exec x = loc('missing')
+@expect x => 0
+
+@test FREELIB with a name removes only that file
+@module 1.qsp
+# one
+---
+@module 2.qsp
+# two
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp' & INCLIB '2.qsp'
+@clear-events
+@exec FREELIB '1.qsp'
+@expect-events
+remove_game 1.qsp
+@expect [loc('one'), loc('two')] => [0, 1]
+
+@test FREELIB without a name removes every file
+@module 1.qsp
+# one
+---
+@module 2.qsp
+# two
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp' & INCLIB '2.qsp'
+@clear-events
+@exec FREELIB
+@expect-events
+remove_game
+@expect [loc('one'), loc('two')] => [0, 0]
+
+@test FREELIB with a name that isn't included still tells the host
+@module 1.qsp
+# one
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp'
+@clear-events
+@exec FREELIB 'other.qsp'
+@expect-events
+remove_game other.qsp
+@expect loc('one') => 1
+
+@test FREELIB does nothing when no file is included
+@game
+# start
+--
+@exec x = 1
+@clear-events
+@exec FREELIB & FREELIB '1.qsp'
+@expect-events
+
+@test FREELIB: a removed file can be included again
+@module 1.qsp
+# one
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp' & FREELIB '1.qsp' & INCLIB '1.qsp'
+@expect-events
+include_game 1.qsp
+remove_game 1.qsp
+include_game 1.qsp
+@expect loc('one') => 1
+
+@test a restart removes the included files
+@module 1.qsp
+# one
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp'
+@restart
+@expect-event remove_game
+@expect loc('one') => 0
+
+@test a save keeps the included files, the host includes them again when the save is opened
+@module 1.qsp
+# one
+---
+@module 2.qsp
+# two
+---
+@game
+# start
+--
+@exec INCLIB '1.qsp' & INCLIB '2.qsp'
+@save s
+@exec FREELIB
+@clear-events
+@load-save s
+@expect-event remove_game
+@expect-event include_game 1.qsp
+@expect-event include_game 2.qsp
+@expect [loc('one'), loc('two')] => [1, 1]
+
+@test OPENQST loads the file as a new game and keeps the variables
+@module 1.qsp
+# one
+---
+@game
+# start
+--
+@exec x = 1
+@clear-events
+@exec OPENQST '1.qsp'
+@expect-events
+open_game 1.qsp
+@expect [loc('one'), loc('start'), x] => [1, 0, 1]

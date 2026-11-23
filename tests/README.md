@@ -44,7 +44,7 @@ before the first action of the test.
 | `@test NAME` | starts a new test |
 | `@src` *(block)* | code of location `test`; the game also gets an empty first location `start` (the same wrapper as `runTestFile()` in qsp-wasm-engine) |
 | `@game` *(block)* | locations in the qsps format: `# name`, code lines, a line starting with `--` |
-| `@module NAME` *(block)* | a separate game in the qsps format, loaded when the game calls `INCLIB 'NAME'` / `OPENQST 'NAME'` |
+| `@module NAME` *(block)* | a separate game in the qsps format: the `INCLUDEGAME` callback (`INCLIB 'NAME'`, a save reopening its files) includes it with `QSPIncludeGameWorldFromData`, the `OPENGAME` callback (`OPENQST 'NAME'`) loads it with `QSPLoadGameWorldFromData` |
 | `@desc LOC` *(block)* | base description of location `LOC` |
 | `@action LOC \| NAME [\| IMAGE]` *(block)* | base action of location `LOC`, the block is its code |
 | `@skip REASON` | the test is skipped; the reason says why (e.g. `ENGINE BUG: ...`) |
@@ -151,7 +151,8 @@ Callbacks are recorded with the names used by qsp-wasm-engine:
 `objects_changed [...]`, `msg TEXT`, `view [FILE]`, `system_cmd TEXT`,
 `user_input [TEXT]`, `input TEXT`, `version [PARAM]`, `menu [...]`,
 `wait N`, `timer N`, `play_file FILE VOLUME`, `is_play FILE`,
-`close_file [FILE]`, `panel_visibility TYPE 0/1`, `open_game FILE IS_NEW`,
+`close_file [FILE]`, `panel_visibility TYPE 0/1`, `open_game FILE`,
+`include_game FILE`, `remove_game [FILE]`,
 `init_game IS_NEW`,
 `save_game [FILE]`, `load_save [FILE]`, `debug LOC:LINE:LOCAL:ACT CODE`,
 `error NAME`. An argument in brackets is omitted when it's empty.

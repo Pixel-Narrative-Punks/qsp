@@ -883,28 +883,42 @@ static void cbInitGame(QSP_BOOL isNewGame)
     }
 }
 
-static void loadGame(Game *game, QSP_BOOL isNewGame);
+static void loadGame(Game *game);
+static void includeGame(Game *game, QSPString file);
 static void afterCall(QSP_BOOL isOk);
 
-static void cbOpenGame(QSPString file, QSP_BOOL isNewGame)
+/* The module defined by @module with the name of the file */
+static Game *findModule(QSPString file)
 {
-    StrBuf sb = {0};
     char *name = toUtf8(file);
+    Game *game = 0;
     int i;
-    sbAdd(&sb, "open_game ");
-    addEscaped(&sb, file);
-    sbAddf(&sb, " %d", isNewGame ? 1 : 0);
-    addEvent(sbStr(&sb));
-    free(sb.Data);
-    for (i = 0; i < T.ModulesCount; ++i)
-    {
-        if (!strcmp(T.Modules[i].Name, name))
-        {
-            loadGame(T.Modules + i, isNewGame);
-            break;
-        }
-    }
+    for (i = 0; i < T.ModulesCount && !game; ++i)
+        if (!strcmp(T.Modules[i].Name, name)) game = T.Modules + i;
     free(name);
+    return game;
+}
+
+/* OPENQST: the host loads the file as a new game */
+static void cbOpenGame(QSPString file)
+{
+    Game *game = findModule(file);
+    eventWithText("open_game", file, 0);
+    if (game) loadGame(game);
+}
+
+/* INCLIB, also after a save is opened: the host includes the file */
+static void cbIncludeGame(QSPString file)
+{
+    Game *game = findModule(file);
+    eventWithText("include_game", file, 0);
+    if (game) includeGame(game, file);
+}
+
+/* FREELIB, a restart & a save: the engine removed the file, every file for an empty name */
+static void cbRemoveGame(QSPString file)
+{
+    eventWithText("remove_game", file, 1);
 }
 
 static SaveSlot *findSave(const char *name, int toCreate)
@@ -1035,6 +1049,8 @@ static void setCallbacks(void)
     QSPSetCallback(QSP_CALL_SETINPUTSTRTEXT, (QSP_CALLBACK)cbSetInput);
     QSPSetCallback(QSP_CALL_SYSTEM, (QSP_CALLBACK)cbSystem);
     QSPSetCallback(QSP_CALL_OPENGAME, (QSP_CALLBACK)cbOpenGame);
+    QSPSetCallback(QSP_CALL_INCLUDEGAME, (QSP_CALLBACK)cbIncludeGame);
+    QSPSetCallback(QSP_CALL_REMOVEGAME, (QSP_CALLBACK)cbRemoveGame);
     QSPSetCallback(QSP_CALL_INITGAME, (QSP_CALLBACK)cbInitGame);
     QSPSetCallback(QSP_CALL_OPENGAMESTATUS, (QSP_CALLBACK)cbOpenSave);
     QSPSetCallback(QSP_CALL_SAVEGAMESTATUS, (QSP_CALLBACK)cbSaveGame);
@@ -1100,10 +1116,18 @@ static void afterCall(QSP_BOOL isOk)
 /* ------------------------------------------------------------ */
 /* Loading games */
 
-static void loadGame(Game *game, QSP_BOOL isNewGame)
+static void loadGame(Game *game)
 {
     ByteBuf bb = buildGameFile(game);
-    if (!QSPLoadGameWorldFromData(bb.Data, (int)bb.Len, isNewGame))
+    if (!QSPLoadGameWorldFromData(bb.Data, (int)bb.Len))
+        afterCall(QSP_FALSE);
+    free(bb.Data);
+}
+
+static void includeGame(Game *game, QSPString file)
+{
+    ByteBuf bb = buildGameFile(game);
+    if (!QSPIncludeGameWorldFromData(file, bb.Data, (int)bb.Len))
         afterCall(QSP_FALSE);
     free(bb.Data);
 }
@@ -1113,7 +1137,7 @@ static void ensureGameLoaded(void)
     if (T.IsGameDirty || !T.IsGameLoaded)
     {
         if (!T.Main.LocsCount) gameLoc(&T.Main, "start");
-        loadGame(&T.Main, QSP_TRUE);
+        loadGame(&T.Main);
         T.IsGameDirty = 0;
         T.IsGameLoaded = 1;
     }
