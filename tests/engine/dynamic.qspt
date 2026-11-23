@@ -123,3 +123,39 @@ after_result = result
 @expect dyn_result => 10
 @expect after_result => 5
 @expect top_result => 5
+
+// ------------------------------------------------------------
+// Not in qsp-wasm-engine: the position of an error in dynamic code
+// "line" is the line of the location that runs the code, "local" is the line within the dynamic code
+
+@test DYNAMIC: an error gives the line within the dynamic code
+@src
+x = 1
+dynamic 'y = 1
+z = 1 / 0'
+@run
+@expect-error DIVBYZERO (location 'test', line 2, local 2, action -1) Z = 1 / 0
+
+@test DYNEVAL: an error gives the line within the dynamic code
+@src
+x = 1
+r = dyneval('
+a = 2
+b = a / 0
+')
+@run
+@expect-error DIVBYZERO (location 'test', line 2, local 3, action -1) B = A / 0
+
+@test DYNAMIC: an error in a code value gives the line within the code
+@src
+c = {
+q = 1
+w = 1 / 0
+}
+dynamic c
+@run
+@expect-error DIVBYZERO (location 'test', line 5, local 3, action -1) W = 1 / 0
+
+@test an error in the code executed by the API has no location
+@exec x = 1 & y = 1 / 0
+@expect-error DIVBYZERO (location '', line 0, local 1, action -1)

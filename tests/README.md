@@ -102,7 +102,7 @@ without the prefix.
 | `@expect-selact N` / `@expect-selobj N` | selected action / object |
 | `@expect-curloc NAME` | `QSPGetCurLocation`: the current location (`$CURLOC`), not the location executing code |
 | `@expect-state LOCATION:LINE:ACTION` | `QSPGetCurStateData`: where the engine executes code, `:0:-1` when it's idle |
-| `@expect-error NAME [(location 'L', line N, local N, action A) LINE]` | the pending error, by name or with its position: `line` is the top-level line, `local` the line of the actual code, `LINE` its text (a prefix of the description is enough) |
+| `@expect-error NAME [(location 'L', line N, local N, action A) LINE]` | the pending error, by name or with its position: `line` is the top-level line, `local` the line within the dynamic code (`DYNAMIC`, `DYNEVAL`, a code value, the code executed by the API), 0 for top-level code, `LINE` its text (a prefix of the description is enough) |
 | `@expect-event TEXT` / `@expect-no-event PREFIX` | an event was / no event starting with `PREFIX` was recorded |
 | `@expect-count N PREFIX` | number of events starting with `PREFIX` |
 | `@expect-events` *(block)* | the exact list of recorded events |

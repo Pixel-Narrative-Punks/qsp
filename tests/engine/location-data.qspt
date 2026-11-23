@@ -104,7 +104,7 @@ x = 1 + _
 z = 3
 y = 1 / 0
 @run
-@expect-error DIVBYZERO (location 'test', line 4, local 4, action -1) Y = 1 / 0
+@expect-error DIVBYZERO (location 'test', line 4, local 0, action -1) Y = 1 / 0
 @expect-loc-code test
 1: X = 1 + 2
 3: Z = 3
