@@ -121,7 +121,7 @@ insvar 'a', 9, 'n', 3
 a['x'] = 1 & a['y'] = 2
 insvar 'a', 9, 0
 @run
-@expect [arrpack('a'), $arrkey('a', 0), $arrkey('a', 1), $arrkey('a', 2)] => [[9, X: 1, Y: 2], ?, 'x', 'y']
+@expect [arrpack('a'), arrkey('a', 0), arrkey('a', 1), arrkey('a', 2)] => [[9, X: 1, Y: 2], ?, 'x', 'y']
 @expect [a['x'], a['y']] => [1, 2]
 
 @test INSVAR: keyed & keyless items move together
@@ -129,7 +129,7 @@ insvar 'a', 9, 0
 a['a'] = 1 & a[] = 2 & a['c'] = 3 & a[] = 4
 insvar 'a', 9, 3, 1
 @run
-@expect [arrpack('a'), $arrkey('a', 0), $arrkey('a', 1), $arrkey('a', 2), $arrkey('a', 3)] => [[A: 1, 9, 2, C: 3], 'a', ?, ?, 'c']
+@expect [arrpack('a'), arrkey('a', 0), arrkey('a', 1), arrkey('a', 2), arrkey('a', 3)] => [[A: 1, 9, 2, C: 3], 'a', ?, ?, 'c']
 @expect [a['a'], a['c']] => [1, 3]
 
 @test INSVAR: tuple keys

@@ -245,3 +245,48 @@ i += 1
 if i < 200: jump 'l'
 @run
 @expect lo >= 1 and hi <= 10 => 1
+
+// ------------------------------------------------------------
+// Not in qsp-wasm-engine: the type prefixes of the functions with a result of any type
+// A prefix gives the typed view of the result, like for a variable: a value of another type becomes
+// the empty value of the prefix type, it isn't converted
+
+@test function prefixes: FUNC
+@game
+# start
+--
+# n
+result = 5
+--
+# s
+result = 'r'
+--
+# t
+result = [1, 'a']
+--
+# s12
+result = '12'
+--
+@exec y = 1
+@expect [func('n'), #func('n'), $func('n'), %func('n')] => [5, 5, '', []]
+@expect [func('s'), #func('s'), $func('s'), %func('s')] => ['r', 0, 'r', []]
+@expect [$func('t'), %func('t')] => ['', [1, 'a']]
+@expect #func('s12') => 0
+
+@test function prefixes: FUNC without a result
+@game
+# start
+--
+# u
+--
+@exec y = 1
+@expect [func('u'), $func('u'), #func('u'), %func('u')] => [?, '', 0, []]
+
+@test function prefixes: DYNEVAL
+@exec y = 1
+@expect [dyneval('result = 5'), $dyneval('result = 5'), #dyneval("result = 'a'")] => [5, '', 0]
+
+@test function prefixes: ARRKEY & ARRITEM
+@exec a['k'] = 7 & a[1] = 2 & b[1, 'x'] = 3
+@expect [arrkey('a', 0), $arrkey('a', 0), arrkey('a', 1), $arrkey('a', 1), %arrkey('b', 0)] => ['k', 'k', ?, '', [1, 'x']]
+@expect [arritem('a', 0), $arritem('a', 0), #arritem('a', 0)] => [7, '', 7]
