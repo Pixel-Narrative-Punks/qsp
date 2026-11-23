@@ -2080,6 +2080,7 @@ static void runCommand(const char *line, char **block, int blockCount)
     else if ((arg = command(line, "@load-save")))
     {
         checkNoPendingError();
+        ensureGameLoaded();
         loadFromSlot(arg);
     }
     else if ((arg = command(line, "@save-file")))
@@ -2090,6 +2091,8 @@ static void runCommand(const char *line, char **block, int blockCount)
     else if ((arg = command(line, "@load-file")))
     {
         checkNoPendingError();
+        /* A save opens only with its game loaded, the file may come from another test */
+        ensureGameLoaded();
         loadFromFile(arg);
     }
     else if ((arg = command(line, "@watch-msg")))
